@@ -291,7 +291,7 @@ userSchema.pre("save", async function () {
     while (!isUnique) {
       const random = Math.floor(100000 + Math.random() * 900000);
 
-      const referralCode = `PAH${random}`;
+      const referralCode = `AH${random}`;
 
       const existingUser = await mongoose
 
