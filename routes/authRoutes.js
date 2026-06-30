@@ -664,6 +664,8 @@ router.put("/update-rank/:id", fetchuser, async (req, res) => {
     user.designation = rank.designation;
     user.directIncomePercent = rank.directIncome;
 
+    user.rankType = "manual";
+
     await user.save();
 
     res.json({
