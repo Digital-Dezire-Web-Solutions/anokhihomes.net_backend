@@ -48,6 +48,8 @@ app.use("/api/payout-settings", require("./routes/payoutSetting"));
 app.use("/api/rating", require("./routes/ratingRoutes"));
 app.use("/api/notification", require("./routes/notificationRoutes"));
 app.use("/api/staff-role", require("./routes/staffRoleRoutes"));
+app.use("/api/expense", require("./routes/expenseRoute"));
+app.use("/api/account", require("./routes/accountRoutes"));
 
 app.get("/", (req, res) => {
   res.json({ message: "Hello MERN Stack! " });

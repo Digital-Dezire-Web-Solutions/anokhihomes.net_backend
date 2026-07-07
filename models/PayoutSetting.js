@@ -26,13 +26,14 @@ const payoutSettingSchema = new mongoose.Schema(
       type: Number,
       default: 16,
     },
+    joiningCharge: {
+      type: Number,
+      default: 999,
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-module.exports = mongoose.model(
-  "PayoutSetting",
-  payoutSettingSchema
-);
+module.exports = mongoose.model("PayoutSetting", payoutSettingSchema);
