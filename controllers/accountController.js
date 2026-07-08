@@ -1,5 +1,6 @@
 const Payment = require("../models/Payment");
 const Expense = require("../models/Expense");
+const Payout = require("../models/Payout");
 
 exports.getAccountStatement = async (req, res) => {
   try {
@@ -50,6 +51,12 @@ exports.getAccountStatement = async (req, res) => {
       .populate("project")
       .populate("createdBy");
 
+    const payouts = await Payout.find({
+      status: "paid",
+    })
+      .populate("user")
+      .populate("paidBy");
+
     // ================= Credit Rows =================
     const paymentRows = filteredPayments.map((item) => ({
       date: item.paymentDate || item.createdAt,
@@ -76,8 +83,22 @@ exports.getAccountStatement = async (req, res) => {
       type: "expense",
     }));
 
+    const payoutRows = payouts.map((item) => ({
+      date: item.paidAt || item.updatedAt,
+      project: null,
+      projectName: "Company Payout",
+      particular: "Commission Payout",
+      customer: item.user?.name || "-",
+      paymentMode: item.paymentMode,
+      credit: 0,
+      debit: item.netAmount,
+      balance: 0,
+      type: "payout",
+      payout: item,
+    }));
+
     // ================= Merge =================
-    let ledger = [...paymentRows, ...expenseRows];
+    let ledger = [...paymentRows, ...expenseRows, ...payoutRows];
 
     // ================= Sort =================
     ledger.sort((a, b) => new Date(a.date) - new Date(b.date));

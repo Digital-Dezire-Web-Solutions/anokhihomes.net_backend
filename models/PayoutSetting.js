@@ -14,7 +14,7 @@ const payoutSettingSchema = new mongoose.Schema(
 
     minimumPayout: {
       type: Number,
-      default: 500,
+      default: 100,
     },
 
     payoutDay1: {
