@@ -39,7 +39,6 @@ app.use("/api/landing", require("./routes/landingRoutes"));
 app.use("/api/wallet", require("./routes/mlmRoutes"));
 app.use("/api/rewards", require("./routes/rewardSlabRoutes"));
 app.use("/api/offer", require("./routes/offerRoute"));
-app.use("/api/discount", require("./routes/discountRoute"));
 app.use("/api/cashback", require("./routes/cashbackRoutes"));
 app.use("/api/help", require("./routes/helpTicketRoutes"));
 app.use("/api/payment-terms", require("./routes/paymentTermsRoutes"));
