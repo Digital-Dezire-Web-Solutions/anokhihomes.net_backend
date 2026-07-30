@@ -346,6 +346,7 @@ router.post("/add", fetchuser, async (req, res) => {
         },
       },
     });
+    res.json(booking);
   } catch (error) {
     console.log(error);
     res.status(500).send("Server Error");
