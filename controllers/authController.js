@@ -6,7 +6,13 @@ const { notifyAdmins } = require("../utils/notify");
 /* =================================
    REGISTER
 ================================= */
+// const convertsalt = async () => {
+//   const password = "281288";
+//   const hashed = await bcrypt.hash(password, 10);
+//   console.log(hashed, "hashed");
+// };
 
+// convertsalt();
 const register = async (req, res) => {
   try {
     const {
@@ -254,10 +260,7 @@ const login = async (req, res) => {
       });
     }
 
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET
-    );
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
 
     res.json({
       token,

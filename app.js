@@ -11,6 +11,7 @@ require("./cron/holdExpiryCron");
 require("./cron/ticketExpiryCron");
 require("./cron/payoutCron");
 require("./cron/notificationCron");
+// require("./controllers/authController");
 // require("./cron/releasePayoutCron");
 
 const express = require("express");

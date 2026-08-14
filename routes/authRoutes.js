@@ -217,6 +217,44 @@ router.put("/change-password", fetchuser, async (req, res) => {
   });
 });
 
+router.get("/check-email/:email", async (req, res) => {
+  try {
+    const email = req.params.email.toLowerCase().trim();
+
+    const user = await User.findOne({ email });
+
+    res.json({
+      exists: !!user,
+      message: user
+        ? "Email already registered"
+        : "Email available",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+});
+
+router.get("/check-phone/:phone", async (req, res) => {
+  try {
+    const phone = req.params.phone.trim();
+
+    const user = await User.findOne({ phone });
+
+    res.json({
+      exists: !!user,
+      message: user
+        ? "Phone number already registered"
+        : "Phone number available",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+});
+
 router.get("/referral/:referralId", async (req, res) => {
   try {
     const user = await User.findOne({
