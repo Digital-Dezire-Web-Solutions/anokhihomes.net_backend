@@ -19,6 +19,7 @@ const register = async (req, res) => {
       name,
       email,
       phone,
+      dob,
       password,
       role,
       staffRole,
@@ -29,6 +30,7 @@ const register = async (req, res) => {
       // EXTRA
       address,
       panNumber,
+      panVerified,
       panPhoto,
       aadharNumber,
       aadharPhoto,
@@ -59,6 +61,7 @@ const register = async (req, res) => {
       name,
       email,
       phone,
+      dob,
       password: hashed,
       role,
       staffRole,
@@ -67,6 +70,7 @@ const register = async (req, res) => {
 
       panNumber,
       panPhoto,
+      panVerified,
 
       aadharNumber,
       aadharPhoto,

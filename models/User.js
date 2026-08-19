@@ -14,7 +14,9 @@ const userSchema = new mongoose.Schema(
     },
 
     phone: String,
-
+    dob: {
+      type: String,
+    },
     password: {
       type: String,
       required: true,
@@ -41,7 +43,23 @@ const userSchema = new mongoose.Schema(
 
     aadharNumber: String,
     aadharPhoto: String,
+    panVerified: {
+      type: Boolean,
+      default: false,
+    },
 
+    panVerifiedAt: {
+      type: Date,
+    },
+
+    // aadhaarVerified: {
+    //   type: Boolean,
+    //   default: false,
+    // },
+
+    // aadhaarVerifiedAt: {
+    //   type: Date,
+    // },
     bankName: String,
     accountNumber: String,
     ifsc: String,

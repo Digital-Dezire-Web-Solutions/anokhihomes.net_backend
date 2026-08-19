@@ -34,6 +34,7 @@ router.post("/create-user", fetchuser, async (req, res) => {
       name,
       email,
       phone,
+      dob,
       password,
       role,
       staffRole,
@@ -45,6 +46,7 @@ router.post("/create-user", fetchuser, async (req, res) => {
       // EXTRA
       address,
       panNumber,
+      panVerified,
       panPhoto,
       aadharNumber,
       aadharPhoto,
@@ -80,6 +82,7 @@ router.post("/create-user", fetchuser, async (req, res) => {
       name,
       email,
       phone,
+      dob,
       password: hashedPassword,
       role,
       staffRole,
@@ -90,6 +93,7 @@ router.post("/create-user", fetchuser, async (req, res) => {
 
       panNumber,
       panPhoto,
+      panVerified,
 
       aadharNumber,
       aadharPhoto,
