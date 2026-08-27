@@ -27,6 +27,7 @@ const NotificationSchema = new mongoose.Schema(
         "reward",
         "rating",
         "system",
+        "plot_hold",
       ],
       default: "system",
     },

@@ -59,6 +59,8 @@ exports.freeHold = async (req, res) => {
     const agentData = await User.findById(agent);
     const customerData = await User.findById(customer);
 
+    const colonyData = await Colony.findById(colony);
+    const plot = colonyData.layout.plots.id(plotId);
     await notifyAdmins({
       sender: agent,
       title: "New Free Plot Hold",
@@ -67,8 +69,6 @@ exports.freeHold = async (req, res) => {
       referenceId: hold._id,
       referenceModel: "PlotHold",
     });
-    const colonyData = await Colony.findById(colony);
-    const plot = colonyData.layout.plots.id(plotId);
 
     if (!plot) {
       return res.status(404).json({
@@ -84,6 +84,7 @@ exports.freeHold = async (req, res) => {
       hold,
     });
   } catch (err) {
+    console.log(err,"error")
     res.status(500).json({
       message: err.message,
     });

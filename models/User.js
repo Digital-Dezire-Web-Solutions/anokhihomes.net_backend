@@ -10,7 +10,8 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
+      trim: true,
+      lowercase: true,
     },
 
     phone: String,
@@ -311,6 +312,8 @@ const userSchema = new mongoose.Schema(
    GENERATE REFERRAL ID
 
 ================================= */
+
+userSchema.index({ email: 1, role: 1 }, { unique: true });
 
 userSchema.pre("save", async function () {
   // Only admin and agent get referralId

@@ -6,7 +6,7 @@ const fetchuser = require("../middleware/fetchUser");
 const User = require("../models/User");
 const IncomeHistory = require("../models/IncomeHistory");
 const WalletTransaction = require("../models/WalletTransaction");
-const rankSlabs = require("../utils/rankSlabs");
+const rankSlabs = require("../models/RankSlab");
 const Payout = require("../models/Payout");
 const UserReward = require("../models/UserReward");
 

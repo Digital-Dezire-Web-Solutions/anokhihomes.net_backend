@@ -1,8 +1,7 @@
+const mongoose = require("mongoose");
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
-const ranks = require("../utils/rankSlabs");
-
 const { login, register } = require("../controllers/authController");
 const fetchuser = require("../middleware/fetchUser");
 const User = require("../models/User");
@@ -12,11 +11,11 @@ const IncomeHistory = require("../models/IncomeHistory");
 const getTeamTree = require("../utils/getTeamTree");
 const { sendOtp } = require("../controllers/sendOtp");
 const { verifyOtp } = require("../controllers/verifyOtp");
+const RankSlab = require("../models/RankSlab");
 
 /* AUTH */
 router.post("/login", login);
 router.post("/register", register);
-
 
 router.post("/send-otp", sendOtp);
 router.post("/verify-otp", verifyOtp);
@@ -67,20 +66,33 @@ router.post("/create-user", fetchuser, async (req, res) => {
       });
     }
 
-    let existingUser = await User.findOne({
-      email,
+    // let existingUser = await User.findOne({
+    //   email,
+    // });
+
+    // if (existingUser) {
+    //   return res.status(400).json({
+    //     msg: "User already exists",
+    //   });
+    // }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+      role: role,
     });
 
     if (existingUser) {
       return res.status(400).json({
-        msg: "User already exists",
+        msg: `This email is already registered as ${role}`,
       });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       name,
-      email,
+      email: normalizedEmail,
       phone,
       dob,
       password: hashedPassword,
@@ -221,17 +233,35 @@ router.put("/change-password", fetchuser, async (req, res) => {
   });
 });
 
+// router.get("/check-email/:email", async (req, res) => {
+//   try {
+//     const email = req.params.email.toLowerCase().trim();
+
+//     const user = await User.findOne({ email });
+
+//     res.json({
+//       exists: !!user,
+//       message: user ? "Email already registered" : "Email available",
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       message: "Internal Server Error",
+//     });
+//   }
+// });
 router.get("/check-email/:email", async (req, res) => {
   try {
     const email = req.params.email.toLowerCase().trim();
+    const { role } = req.query;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      email,
+      role,
+    });
 
     res.json({
       exists: !!user,
-      message: user
-        ? "Email already registered"
-        : "Email available",
+      message: user ? `Email already registered as ${role}` : "Email available",
     });
   } catch (error) {
     res.status(500).json({
@@ -428,6 +458,207 @@ router.get("/all-users", fetchuser, async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).send("Internal server error");
+  }
+});
+
+// admin shift agents
+
+router.put("/shift-position/:id", fetchuser, async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    // ==============================
+    // 1. CHECK LOGGED-IN USER
+    // ==============================
+    const loggedUser = await User.findById(req.user.id).session(session);
+
+    if (!loggedUser) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        msg: "Logged in user not found",
+      });
+    }
+
+    // ONLY ADMIN CAN SHIFT
+    if (loggedUser.role !== "admin") {
+      await session.abortTransaction();
+
+      return res.status(403).json({
+        msg: "Only admin can shift agent position",
+      });
+    }
+
+    // ==============================
+    // 2. GET NEW POSITION
+    // ==============================
+    const { position } = req.body;
+
+    if (!["left", "right"].includes(position)) {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        msg: "Position must be left or right",
+      });
+    }
+
+    // ==============================
+    // 3. FIND AGENT
+    // ==============================
+    const agent = await User.findById(req.params.id).session(session);
+
+    if (!agent) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        msg: "Agent not found",
+      });
+    }
+
+    if (agent.role !== "agent") {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        msg: "Only agents can be shifted",
+      });
+    }
+
+    // ==============================
+    // 4. CHECK CURRENT POSITION
+    // ==============================
+    if (agent.position === position) {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        msg: `Agent is already on ${position}`,
+      });
+    }
+
+    // ==============================
+    // 5. BUSINESS LOCK
+    // ==============================
+    const hasBusiness = Number(agent.selfBusiness || 0) > 0;
+
+    if (hasBusiness) {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        msg: "Agent position cannot be changed after business has started",
+        business: {
+          selfBusiness: agent.selfBusiness,
+        },
+      });
+    }
+
+    // ==============================
+    // 6. FIND PARENT
+    // ==============================
+    if (!agent.parent) {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        msg: "Agent does not have a parent",
+      });
+    }
+
+    const parent = await User.findById(agent.parent).session(session);
+
+    if (!parent) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        msg: "Parent user not found",
+      });
+    }
+
+    // ==============================
+    // 7. REMOVE FROM OLD SIDE
+    // ==============================
+    if (agent.position === "left") {
+      await User.updateOne(
+        { _id: parent._id },
+        {
+          $pull: {
+            leftChildren: agent._id,
+          },
+        },
+        { session },
+      );
+    }
+
+    if (agent.position === "right") {
+      await User.updateOne(
+        { _id: parent._id },
+        {
+          $pull: {
+            rightChildren: agent._id,
+          },
+        },
+        { session },
+      );
+    }
+
+    // ==============================
+    // 8. ADD TO NEW SIDE
+    // ==============================
+    if (position === "left") {
+      await User.updateOne(
+        { _id: parent._id },
+        {
+          $addToSet: {
+            leftChildren: agent._id,
+          },
+        },
+        { session },
+      );
+    }
+
+    if (position === "right") {
+      await User.updateOne(
+        { _id: parent._id },
+        {
+          $addToSet: {
+            rightChildren: agent._id,
+          },
+        },
+        { session },
+      );
+    }
+
+    // ==============================
+    // 9. UPDATE AGENT POSITION
+    // ==============================
+    agent.position = position;
+
+    await agent.save({ session });
+
+    // ==============================
+    // 10. COMMIT
+    // ==============================
+    await session.commitTransaction();
+
+    const updatedAgent = await User.findById(agent._id)
+      .select("-password")
+      .populate("parent", "name referralId position");
+
+    return res.json({
+      success: true,
+      msg: `Agent shifted to ${position} successfully`,
+      agent: updatedAgent,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+
+    console.error("Shift position error:", error);
+
+    return res.status(500).json({
+      msg: "Failed to shift agent position",
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
   }
 });
 
@@ -666,8 +897,13 @@ router.get("/my-team-tree", fetchuser, async (req, res) => {
 
 router.get("/ranks", fetchuser, async (req, res) => {
   try {
+    const ranks = await RankSlab.find()
+      .sort({ level: 1 });
+
     res.json(ranks);
   } catch (err) {
+    console.log(err);
+
     res.status(500).json({
       msg: "Internal Server Error",
     });
@@ -686,7 +922,7 @@ router.put("/update-rank/:id", fetchuser, async (req, res) => {
 
     const { level } = req.body;
 
-    const rank = ranks.find((r) => r.level === Number(level));
+    const rank = RankSlab.find((r) => r.level === Number(level));
 
     if (!rank) {
       return res.status(400).json({
@@ -723,6 +959,118 @@ router.put("/update-rank/:id", fetchuser, async (req, res) => {
   } catch (err) {
     console.log(err);
     res.status(500).send("Internal Server Error");
+  }
+});
+
+router.put("/update-rank-slab/:level", fetchuser, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user.id);
+
+    if (!admin) {
+      return res.status(404).json({
+        msg: "Admin not found",
+      });
+    }
+
+    if (admin.role !== "admin") {
+      return res.status(403).json({
+        msg: "Only admin can update rank slabs",
+      });
+    }
+
+    const level = Number(req.params.level);
+
+    const {
+      min,
+      max,
+      directIncome,
+      designation,
+    } = req.body;
+
+    const rank = await RankSlab.findOne({ level });
+
+    if (!rank) {
+      return res.status(404).json({
+        msg: "Rank slab not found",
+      });
+    }
+
+    // =========================
+    // VALIDATION
+    // =========================
+
+    if (min === undefined || min === null || Number(min) < 0) {
+      return res.status(400).json({
+        msg: "Valid minimum business is required",
+      });
+    }
+
+    if (!designation || !designation.trim()) {
+      return res.status(400).json({
+        msg: "Designation is required",
+      });
+    }
+
+    if (
+      directIncome === undefined ||
+      directIncome === null ||
+      Number(directIncome) < 0 ||
+      Number(directIncome) > 100
+    ) {
+      return res.status(400).json({
+        msg: "Direct income must be between 0 and 100",
+      });
+    }
+
+    // =========================
+    // MAXIMUM
+    // =========================
+
+    if (
+      max !== undefined &&
+      max !== null &&
+      max !== "" &&
+      max !== "Infinity" &&
+      Number(max) <= Number(min)
+    ) {
+      return res.status(400).json({
+        msg: "Maximum business must be greater than minimum business",
+      });
+    }
+
+    // =========================
+    // UPDATE
+    // =========================
+
+    rank.min = Number(min);
+
+    if (
+      max === undefined ||
+      max === null ||
+      max === "" ||
+      max === "Infinity"
+    ) {
+      rank.max = Infinity;
+    } else {
+      rank.max = Number(max);
+    }
+
+    rank.directIncome = Number(directIncome);
+    rank.designation = designation.trim();
+
+    await rank.save();
+
+    res.json({
+      success: true,
+      msg: "Rank slab updated successfully",
+      rank,
+    });
+  } catch (error) {
+    console.log("Update rank slab error:", error);
+
+    res.status(500).json({
+      msg: "Internal Server Error",
+    });
   }
 });
 

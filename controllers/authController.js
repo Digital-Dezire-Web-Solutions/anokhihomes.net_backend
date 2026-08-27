@@ -45,13 +45,26 @@ const register = async (req, res) => {
       nomineeAadharPhoto,
     } = req.body;
 
+    // const existingUser = await User.findOne({
+    //   email,
+    // });
+
+    // if (existingUser) {
+    //   return res.status(400).json({
+    //     msg: "User already exists",
+    //   });
+    // }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
     const existingUser = await User.findOne({
-      email,
+      email: normalizedEmail,
+      role: role,
     });
 
     if (existingUser) {
       return res.status(400).json({
-        msg: "User already exists",
+        msg: `This email is already registered as ${role}`,
       });
     }
 
@@ -59,7 +72,7 @@ const register = async (req, res) => {
 
     const user = new User({
       name,
-      email,
+      email: normalizedEmail,
       phone,
       dob,
       password: hashed,
@@ -227,20 +240,98 @@ const register = async (req, res) => {
 //   }
 // };
 
+// const login = async (req, res) => {
+//   try {
+//     const { loginId, password } = req.body;
+
+//     const user = await User.findOne({
+//       $or: [
+//         { email: loginId.toLowerCase() },
+//         { referralId: loginId.toUpperCase() },
+//       ],
+//     });
+
+//     if (!user) {
+//       return res.status(404).json({
+//         msg: "User not found",
+//       });
+//     }
+
+//     if (user.status === "approval") {
+//       return res.status(403).json({
+//         msg: "Your account is under approval",
+//       });
+//     }
+
+//     if (user.status === "inactive") {
+//       return res.status(403).json({
+//         msg: "Account inactive by admin. Please contact admin.",
+//       });
+//     }
+
+//     const match = await bcrypt.compare(password, user.password);
+
+//     if (!match) {
+//       return res.status(400).json({
+//         msg: "Invalid password",
+//       });
+//     }
+
+//     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+
+//     res.json({
+//       token,
+//       user,
+//     });
+//   } catch (error) {
+//     console.log(error);
+
+//     res.status(500).json({
+//       msg: "Server Error",
+//     });
+//   }
+// };
+
 const login = async (req, res) => {
   try {
-    const { loginId, password } = req.body;
+    const { loginId, password, role } = req.body;
 
-    const user = await User.findOne({
-      $or: [
-        { email: loginId.toLowerCase() },
-        { referralId: loginId.toUpperCase() },
-      ],
-    });
+    if (!loginId || !password || !role) {
+      return res.status(400).json({
+        msg: "Login ID, password and role are required",
+      });
+    }
+
+    const normalizedLoginId = loginId.trim();
+
+    let query;
+
+    // Agent/Admin can login using email OR referral ID
+    if (["admin", "agent"].includes(role)) {
+      query = {
+        $or: [
+          {
+            email: normalizedLoginId.toLowerCase(),
+          },
+          {
+            referralId: normalizedLoginId.toUpperCase(),
+          },
+        ],
+        role,
+      };
+    } else {
+      // Customer / Staff login using email
+      query = {
+        email: normalizedLoginId.toLowerCase(),
+        role,
+      };
+    }
+
+    const user = await User.findOne(query);
 
     if (!user) {
       return res.status(404).json({
-        msg: "User not found",
+        msg: "Invalid login credentials",
       });
     }
 
@@ -260,18 +351,26 @@ const login = async (req, res) => {
 
     if (!match) {
       return res.status(400).json({
-        msg: "Invalid password",
+        msg: "Invalid login credentials",
       });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET
+    );
+
+    const finalUser = await User.findById(user._id)
+      .select("-password")
+      .populate("staffRole", "name");
 
     res.json({
+      success: true,
       token,
-      user,
+      user: finalUser,
     });
   } catch (error) {
-    console.log(error);
+    console.error("Login error:", error);
 
     res.status(500).json({
       msg: "Server Error",
