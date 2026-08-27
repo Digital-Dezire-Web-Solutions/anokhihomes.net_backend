@@ -54,6 +54,7 @@ router.post("/panverify", async (req, res) => {
       data: response.data,
     });
   } catch (error) {
+    console.log(error)
     console.error(
       "PAN verification error:",
       error.response?.data || error.message,
