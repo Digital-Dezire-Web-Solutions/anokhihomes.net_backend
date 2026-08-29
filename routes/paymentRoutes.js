@@ -16,6 +16,7 @@ const checkRewards = require("../mlmController/checkRewards");
 const generateReceiptNo = require("../utils/generateReceiptNo");
 const generateReceipt = require("../utils/generateReceipt");
 const { notifyUser, notifyAdmins } = require("../utils/notify");
+const { formatCurrency } = require("../utils/formatCurrency");
 
 // =========================
 // GET ALL PAYMENTS
