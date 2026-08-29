@@ -341,6 +341,52 @@ userSchema.pre("save", async function () {
       }
     }
   }
+  if (this.role === "user") {
+    let isUnique = false;
+
+    while (!isUnique) {
+      const random = Math.floor(100000 + Math.random() * 900000);
+
+      const referralCode = `CAH${random}`;
+
+      const existingUser = await mongoose
+
+        .model("User")
+
+        .findOne({
+          referralId: referralCode,
+        });
+
+      if (!existingUser) {
+        this.referralId = referralCode;
+
+        isUnique = true;
+      }
+    }
+  }
+  if (this.role === "staff") {
+    let isUnique = false;
+
+    while (!isUnique) {
+      const random = Math.floor(100000 + Math.random() * 900000);
+
+      const referralCode = `SAH${random}`;
+
+      const existingUser = await mongoose
+
+        .model("User")
+
+        .findOne({
+          referralId: referralCode,
+        });
+
+      if (!existingUser) {
+        this.referralId = referralCode;
+
+        isUnique = true;
+      }
+    }
+  }
 });
 
 module.exports = mongoose.model("User", userSchema);

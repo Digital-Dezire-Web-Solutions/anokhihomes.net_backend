@@ -12,6 +12,9 @@ const getTeamTree = require("../utils/getTeamTree");
 const { sendOtp } = require("../controllers/sendOtp");
 const { verifyOtp } = require("../controllers/verifyOtp");
 const RankSlab = require("../models/RankSlab");
+const Lead = require("../models/Lead");
+const SiteVisit = require("../models/SiteVisit");
+const Booking = require("../models/Booking");
 
 /* AUTH */
 router.post("/login", login);
@@ -231,6 +234,128 @@ router.put("/change-password", fetchuser, async (req, res) => {
     success: true,
     message: "Password updated",
   });
+});
+
+/* =========================================
+   GET CONNECTED CUSTOMERS FOR AGENT
+========================================= */
+
+router.get("/my-connected-users", fetchuser, async (req, res) => {
+  try {
+    const agentId = req.user.id;
+
+    // =========================================
+    // CHECK LOGGED-IN USER
+    // =========================================
+
+    const agent = await User.findById(agentId).select(
+      "_id name role referralId",
+    );
+
+    if (!agent) {
+      return res.status(404).json({
+        msg: "User not found",
+      });
+    }
+
+    // Only agent can use this route
+    if (agent.role !== "agent") {
+      return res.status(403).json({
+        msg: "Only agents can access connected customers",
+      });
+    }
+
+    // =========================================
+    // GET CUSTOMERS CREATED BY THIS AGENT
+    // =========================================
+
+    const createdUsers = await User.find({
+      role: "user",
+      createdBy: agentId,
+    }).select("_id");
+
+    // =========================================
+    // GET CUSTOMERS FROM LEADS
+    // Lead.agent -> Lead.customer
+    // =========================================
+
+    const leads = await Lead.find({
+      agent: agentId,
+      customer: { $ne: null },
+    }).select("customer");
+
+    // =========================================
+    // GET CUSTOMERS FROM SITE VISITS
+    // SiteVisit.agent -> SiteVisit.customer
+    // =========================================
+
+    const siteVisits = await SiteVisit.find({
+      agent: agentId,
+      customer: { $ne: null },
+    }).select("customer");
+
+    // =========================================
+    // GET CUSTOMERS FROM BOOKINGS
+    // Booking.agent -> Booking.customer
+    // =========================================
+
+    const bookings = await Booking.find({
+      agent: agentId,
+      customer: { $ne: null },
+    }).select("customer");
+
+    // =========================================
+    // COMBINE CUSTOMER IDS
+    // =========================================
+
+    const customerIds = [
+      ...createdUsers.map((user) => user._id),
+
+      ...leads.map((lead) => lead.customer),
+
+      ...siteVisits.map((visit) => visit.customer),
+
+      ...bookings.map((booking) => booking.customer),
+    ];
+
+    // =========================================
+    // REMOVE DUPLICATES
+    // =========================================
+
+    const uniqueCustomerIds = [
+      ...new Set(customerIds.map((id) => id.toString())),
+    ];
+
+    // =========================================
+    // GET ONLY USERS
+    // =========================================
+
+    const users = await User.find({
+      _id: {
+        $in: uniqueCustomerIds,
+      },
+      role: "user",
+    })
+      .select("-password")
+      .populate("createdBy", "name referralId designation");
+
+    // =========================================
+    // RESPONSE
+    // =========================================
+
+    return res.json({
+      success: true,
+      count: users.length,
+      users,
+    });
+  } catch (error) {
+    console.error("Get connected customers error:", error);
+
+    return res.status(500).json({
+      msg: "Internal Server Error",
+      error: error.message,
+    });
+  }
 });
 
 // router.get("/check-email/:email", async (req, res) => {

@@ -90,7 +90,7 @@ cron.schedule("0 1 * * *", async () => {
       releaseDate = new Date(today);
       await Payout.updateMany(
         {
-          status: "hold",
+          status: "payable",
         },
         {
           status: "payable",

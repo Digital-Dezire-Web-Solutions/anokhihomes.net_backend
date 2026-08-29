@@ -60,7 +60,7 @@ exports.createPayout = async (cycleStart, cycleEnd, releaseDate) => {
         netAmount,
         totalPaid: 0,
         balance: netAmount,
-        status: "hold",
+        status: "payable",
         transactions: userData.transactions.map((t) => t._id),
       });
       await notifyAdmins({
