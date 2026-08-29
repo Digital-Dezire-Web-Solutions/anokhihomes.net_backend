@@ -897,8 +897,7 @@ router.get("/my-team-tree", fetchuser, async (req, res) => {
 
 router.get("/ranks", fetchuser, async (req, res) => {
   try {
-    const ranks = await RankSlab.find()
-      .sort({ level: 1 });
+    const ranks = await RankSlab.find().sort({ level: 1 });
 
     res.json(ranks);
   } catch (err) {
@@ -914,6 +913,12 @@ router.put("/update-rank/:id", fetchuser, async (req, res) => {
   try {
     const loggedUser = await User.findById(req.user.id);
 
+    if (!loggedUser) {
+      return res.status(404).json({
+        msg: "Admin not found",
+      });
+    }
+
     if (loggedUser.role !== "admin") {
       return res.status(403).json({
         msg: "Only admin can update designation",
@@ -922,7 +927,12 @@ router.put("/update-rank/:id", fetchuser, async (req, res) => {
 
     const { level } = req.body;
 
-    const rank = RankSlab.find((r) => r.level === Number(level));
+    // Find rank slab from MongoDB
+    const rank = await RankSlab.findOne({
+      level: Number(level),
+    });
+
+    // console.log("Selected Rank:", rank);
 
     if (!rank) {
       return res.status(400).json({
@@ -930,6 +940,7 @@ router.put("/update-rank/:id", fetchuser, async (req, res) => {
       });
     }
 
+    // Find agent
     const user = await User.findById(req.params.id);
 
     if (!user) {
@@ -944,21 +955,28 @@ router.put("/update-rank/:id", fetchuser, async (req, res) => {
       });
     }
 
+    // Update agent according to RankSlab
     user.level = rank.level;
     user.designation = rank.designation;
     user.directIncomePercent = rank.directIncome;
 
+    // Admin manually assigned this rank
     user.rankType = "manual";
 
     await user.save();
 
-    res.json({
+    return res.json({
+      success: true,
       msg: "Rank updated successfully",
       user,
     });
   } catch (err) {
-    console.log(err);
-    res.status(500).send("Internal Server Error");
+    console.error("Update agent rank error:", err);
+
+    return res.status(500).json({
+      msg: "Internal Server Error",
+      error: err.message,
+    });
   }
 });
 
@@ -980,12 +998,7 @@ router.put("/update-rank-slab/:level", fetchuser, async (req, res) => {
 
     const level = Number(req.params.level);
 
-    const {
-      min,
-      max,
-      directIncome,
-      designation,
-    } = req.body;
+    const { min, max, directIncome, designation } = req.body;
 
     const rank = await RankSlab.findOne({ level });
 
@@ -1044,12 +1057,7 @@ router.put("/update-rank-slab/:level", fetchuser, async (req, res) => {
 
     rank.min = Number(min);
 
-    if (
-      max === undefined ||
-      max === null ||
-      max === "" ||
-      max === "Infinity"
-    ) {
+    if (max === undefined || max === null || max === "" || max === "Infinity") {
       rank.max = Infinity;
     } else {
       rank.max = Number(max);
