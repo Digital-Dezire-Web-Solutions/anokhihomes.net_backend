@@ -67,28 +67,28 @@
 
 // module.exports = distributeDirectIncome;
 
-
 const User = require("../models/User");
 const IncomeHistory = require("../models/IncomeHistory");
-const rankSlabs = require("../models/RankSlab");
+const RankSlab = require("../models/RankSlab");
 const WalletTransaction = require("../models/WalletTransaction");
 const getCurrentCycle = require("../utils/getCurrentCycle");
 
-const distributeDirectIncome = async (
-  agentId,
-  businessAmount,
-  paymentId
-) => {
+const distributeDirectIncome = async (agentId, businessAmount, paymentId) => {
   try {
     const user = await User.findById(agentId);
 
     if (!user) return;
 
-    const previousBusiness =
-      Number(user.directIncomeBusinessProcessed || 0);
+    const rankSlabs = await RankSlab.find().sort({ min: 1 });
 
-    const newBusiness =
-      Number(user.selfBusiness || 0);
+    if (!rankSlabs.length) {
+      console.log("No rank slabs configured");
+      return;
+    }
+
+    const previousBusiness = Number(user.directIncomeBusinessProcessed || 0);
+
+    const newBusiness = Number(user.selfBusiness || 0);
 
     if (newBusiness <= previousBusiness) {
       return;
@@ -115,37 +115,26 @@ const distributeDirectIncome = async (
         const start = slab.min;
         const end = slab.max;
 
-        const overlapStart = Math.max(
-          previousBusiness,
-          start
-        );
+        const overlapStart = Math.max(previousBusiness, start);
 
-        const overlapEnd = Math.min(
-          newBusiness,
-          end
-        );
+        const overlapEnd = Math.min(newBusiness, end);
 
         if (overlapEnd <= overlapStart) {
           continue;
         }
 
-        const slabBusiness =
-          overlapEnd - overlapStart;
+        const slabBusiness = overlapEnd - overlapStart;
 
-        const slabIncome =
-          (slabBusiness * slab.directIncome) / 100;
+        const slabIncome = (slabBusiness * slab.directIncome) / 100;
 
         totalIncome += slabIncome;
       }
-    }
-
-    /*
+    } else {
+      /*
     =====================================================
     MANUAL RANK
     =====================================================
     */
-
-    else {
       const manualLevel = Number(user.level);
 
       /*
@@ -153,14 +142,10 @@ const distributeDirectIncome = async (
       assigned level.
       */
 
-      const manualSlab = rankSlabs.find(
-        (slab) => slab.level === manualLevel
-      );
+      const manualSlab = rankSlabs.find((slab) => slab.level === manualLevel);
 
       if (!manualSlab) {
-        console.log(
-          `Manual rank slab not found for level ${manualLevel}`
-        );
+        console.log(`Manual rank slab not found for level ${manualLevel}`);
         return;
       }
 
@@ -204,19 +189,15 @@ const distributeDirectIncome = async (
       Next ₹100,000,000   → 19%
       */
 
-      let remainingBusiness =
-        newBusiness - previousBusiness;
+      let remainingBusiness = newBusiness - previousBusiness;
 
       let processedBusiness = previousBusiness;
 
       let currentLevelIndex = rankSlabs.findIndex(
-        (slab) => slab.level === manualLevel
+        (slab) => slab.level === manualLevel,
       );
 
-      while (
-        remainingBusiness > 0 &&
-        currentLevelIndex < rankSlabs.length
-      ) {
+      while (remainingBusiness > 0 && currentLevelIndex < rankSlabs.length) {
         const slab = rankSlabs[currentLevelIndex];
 
         /*
@@ -228,28 +209,18 @@ const distributeDirectIncome = async (
 
         let slabCapacity;
 
-        if (currentLevelIndex ===
-            rankSlabs.findIndex(
-              (s) => s.level === manualLevel
-            )) {
+        if (
+          currentLevelIndex ===
+          rankSlabs.findIndex((s) => s.level === manualLevel)
+        ) {
           slabCapacity = manualSlabSize;
         } else {
-          slabCapacity =
-            slab.max === Infinity
-              ? Infinity
-              : slab.max - slab.min;
+          slabCapacity = slab.max === Infinity ? Infinity : slab.max - slab.min;
         }
 
-        const businessForThisSlab =
-          Math.min(
-            remainingBusiness,
-            slabCapacity
-          );
+        const businessForThisSlab = Math.min(remainingBusiness, slabCapacity);
 
-        const income =
-          (businessForThisSlab *
-            slab.directIncome) /
-          100;
+        const income = (businessForThisSlab * slab.directIncome) / 100;
 
         totalIncome += income;
 
@@ -273,8 +244,7 @@ const distributeDirectIncome = async (
 
     // user.wallet += totalIncome;
 
-    const { cycleStart, cycleEnd } =
-      getCurrentCycle();
+    const { cycleStart, cycleEnd } = getCurrentCycle();
 
     await WalletTransaction.create({
       user: user._id,
@@ -294,8 +264,7 @@ const distributeDirectIncome = async (
     Mark the business that has already been processed.
     */
 
-    user.directIncomeBusinessProcessed =
-      newBusiness;
+    user.directIncomeBusinessProcessed = newBusiness;
 
     await user.save();
 
@@ -309,14 +278,9 @@ const distributeDirectIncome = async (
       creditedAt: new Date(),
     });
 
-    console.log(
-      `${user.name} Direct Income ₹${totalIncome}`
-    );
+    console.log(`${user.name} Direct Income ₹${totalIncome}`);
   } catch (error) {
-    console.log(
-      "Direct income error:",
-      error
-    );
+    console.log("Direct income error:", error);
   }
 };
 

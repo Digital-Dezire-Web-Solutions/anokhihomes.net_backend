@@ -164,7 +164,7 @@ router.post("/add", fetchuser, async (req, res) => {
       // ✅ 3. AUTO CONFIRM BOOKING
       if (bookingDoc.amountPaid >= bookingDoc.finalAmount) {
         bookingDoc.status = "confirmed";
-
+        await distributeCashbackIncome(bookingData._id, bookingData.agent);
         const colony = await Colony.findById(bookingDoc.colony);
 
         if (colony) {
@@ -198,7 +198,6 @@ router.post("/add", fetchuser, async (req, res) => {
 
         await distributeMatchingIncome(bookingData.agent);
         // await distributeRoyaltyIncome(bookingData._id, bookingData.agent);
-        await distributeCashbackIncome(bookingData._id, bookingData.agent);
 
         payment.mlmProcessed = true;
         await payment.save();
@@ -348,6 +347,7 @@ router.put("/action/:id", fetchuser, async (req, res) => {
 
       if (booking.amountPaid >= booking.finalAmount) {
         booking.status = "confirmed";
+        await distributeCashbackIncome(bookingData._id, bookingData.agent);
         await notifyAdmins({
           sender: booking.agent,
           title: "Booking Confirmed",
@@ -417,7 +417,6 @@ router.put("/action/:id", fetchuser, async (req, res) => {
 
         await distributeMatchingIncome(booking.agent);
         // await distributeRoyaltyIncome(booking._id, booking.agent);
-        await distributeCashbackIncome(booking._id, booking.agent);
         // await checkRewards(booking.agent);
 
         payment.mlmProcessed = true;

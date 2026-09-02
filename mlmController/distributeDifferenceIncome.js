@@ -65,10 +65,9 @@
 
 // module.exports = distributeDifferenceIncome;
 
-
 const User = require("../models/User");
 const IncomeHistory = require("../models/IncomeHistory");
-const rankSlabs = require("../models/RankSlab");
+const RankSlab = require("../models/RankSlab");
 const getCurrentCycle = require("../utils/getCurrentCycle");
 const WalletTransaction = require("../models/WalletTransaction");
 
@@ -83,7 +82,12 @@ const distributeDifferenceIncome = async (
     if (!child) return;
 
     let parentId = child.parent;
+    const rankSlabs = await RankSlab.find().sort({ min: 1 });
 
+    if (!rankSlabs.length) {
+      console.log("No rank slabs configured");
+      return;
+    }
     while (parentId) {
       const parent = await User.findById(parentId);
 
@@ -97,15 +101,14 @@ const distributeDifferenceIncome = async (
 
       if (child.rankType === "manual") {
         const childSlab = rankSlabs.find(
-          (slab) => slab.level === Number(child.level)
+          (slab) => slab.level === Number(child.level),
         );
 
         childRate = childSlab?.directIncome || 0;
       } else {
         const childSlab = rankSlabs.find(
           (slab) =>
-            child.selfBusiness >= slab.min &&
-            child.selfBusiness < slab.max
+            child.selfBusiness >= slab.min && child.selfBusiness < slab.max,
         );
 
         childRate = childSlab?.directIncome || 0;
@@ -119,15 +122,14 @@ const distributeDifferenceIncome = async (
 
       if (parent.rankType === "manual") {
         const parentSlab = rankSlabs.find(
-          (slab) => slab.level === Number(parent.level)
+          (slab) => slab.level === Number(parent.level),
         );
 
         parentRate = parentSlab?.directIncome || 0;
       } else {
         const parentSlab = rankSlabs.find(
           (slab) =>
-            parent.selfBusiness >= slab.min &&
-            parent.selfBusiness < slab.max
+            parent.selfBusiness >= slab.min && parent.selfBusiness < slab.max,
         );
 
         parentRate = parentSlab?.directIncome || 0;
@@ -139,17 +141,12 @@ const distributeDifferenceIncome = async (
 
       const difference = parentRate - childRate;
 
-      if (
-        difference > 0 &&
-        parent.status === "active"
-      ) {
-        const income =
-          (businessAmount * difference) / 100;
+      if (difference > 0 && parent.status === "active") {
+        const income = (businessAmount * difference) / 100;
 
         // parent.wallet += income;
 
-        const { cycleStart, cycleEnd } =
-          getCurrentCycle();
+        const { cycleStart, cycleEnd } = getCurrentCycle();
 
         await WalletTransaction.create({
           user: parent._id,
@@ -178,9 +175,7 @@ const distributeDifferenceIncome = async (
           creditedAt: new Date(),
         });
 
-        console.log(
-          `${parent.name} Difference Income ₹${income}`
-        );
+        console.log(`${parent.name} Difference Income ₹${income}`);
       }
 
       // Move upward in the tree

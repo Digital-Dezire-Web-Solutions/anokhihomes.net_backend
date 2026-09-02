@@ -61,7 +61,7 @@
 
 // module.exports = updateRank;
 
-const rankSlabs = require("../models/RankSlab");
+const RankSlab = require("../models/RankSlab");
 const User = require("../models/User");
 
 const updateRank = async (userId) => {
@@ -70,6 +70,12 @@ const updateRank = async (userId) => {
 
     if (!user) return;
 
+    const rankSlabs = await RankSlab.find().sort({ min: 1 });
+
+    if (!rankSlabs.length) {
+      console.log("No rank slabs configured");
+      return;
+    }
     // ADMIN NEVER CHANGES
     if (user.role === "admin") {
       if (
@@ -99,9 +105,7 @@ const updateRank = async (userId) => {
     // =====================================================
     if (user.rankType === "manual") {
       // Find the slab of the manually assigned level
-      const currentSlab = rankSlabs.find(
-        (r) => r.level === Number(user.level)
-      );
+      const currentSlab = rankSlabs.find((r) => r.level === Number(user.level));
 
       if (!currentSlab) return;
 
@@ -111,11 +115,7 @@ const updateRank = async (userId) => {
        */
       rank = [...rankSlabs]
         .sort((a, b) => b.level - a.level)
-        .find(
-          (r) =>
-            r.level >= currentSlab.level &&
-            totalBusiness >= r.min
-        );
+        .find((r) => r.level >= currentSlab.level && totalBusiness >= r.min);
 
       // If business has not reached the next slab,
       // keep the manually assigned rank.
@@ -148,7 +148,7 @@ const updateRank = async (userId) => {
       user.directIncomePercent = rank.directIncome;
 
       console.log(
-        `${user.name} promoted to ${rank.designation} (${rank.directIncome}%)`
+        `${user.name} promoted to ${rank.designation} (${rank.directIncome}%)`,
       );
     }
 
