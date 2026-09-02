@@ -6,11 +6,12 @@ const User = require("../models/User");
 const Booking = require("../models/Booking");
 const fetchuser = require("../middleware/fetchUser");
 const Colony = require("../models/Colony");
-const distributeDirectIncome = require("../mlmController/distributeDirectIncome");
-const updateBusinessTree = require("../mlmController/updateBusinessTree");
-const distributeDifferenceIncome = require("../mlmController/distributeDifferenceIncome");
 const WalletTransaction = require("../models/WalletTransaction");
+const updateBusinessTree = require("../mlmController/updateBusinessTree");
+const distributeDirectIncome = require("../mlmController/distributeDirectIncome");
+const distributeDifferenceIncome = require("../mlmController/distributeDifferenceIncome");
 const distributeMatchingIncome = require("../mlmController/distributeMatchingIncome");
+const distributeCashbackIncome = require("../mlmController/distributeCashbackIncome");
 const Withdrawal = require("../models/Withdrawal");
 const checkRewards = require("../mlmController/checkRewards");
 const generateReceiptNo = require("../utils/generateReceiptNo");
@@ -196,7 +197,8 @@ router.post("/add", fetchuser, async (req, res) => {
         );
 
         await distributeMatchingIncome(bookingData.agent);
-        await checkRewards(bookingData.agent);
+        // await distributeRoyaltyIncome(bookingData._id, bookingData.agent);
+        await distributeCashbackIncome(bookingData._id, bookingData.agent);
 
         payment.mlmProcessed = true;
         await payment.save();
@@ -414,7 +416,9 @@ router.put("/action/:id", fetchuser, async (req, res) => {
         );
 
         await distributeMatchingIncome(booking.agent);
-        await checkRewards(booking.agent);
+        // await distributeRoyaltyIncome(booking._id, booking.agent);
+        await distributeCashbackIncome(booking._id, booking.agent);
+        // await checkRewards(booking.agent);
 
         payment.mlmProcessed = true;
       }

@@ -1,0 +1,228 @@
+// const User = require("../models/User");
+// const IncomeHistory = require("../models/IncomeHistory");
+// const Payout = require("../models/Payout");
+// const getPayoutCycle = require("../cron/getPayoutCycle");
+// const PayoutSetting = require("../models/PayoutSetting");
+
+// const TYPE_FIELD_MAP = {
+//   direct_income: "directIncome",
+//   difference_income: "differenceIncome",
+//   matching_income: "matchingIncome",
+//   royalty_income: "royaltyIncome",
+//   cashback_income: "cashbackIncome",
+//   best_performance_income: "bestPerformanceIncome",
+//   festival_bonus_income: "festivalBonusIncome",
+//   referal_income: "referralIncome",
+//   reward_income: "rewardIncome",
+// };
+
+// const generatePayouts = async (referenceDate = new Date()) => {
+//   const setting = await PayoutSetting.findOne();
+//   const tdsPercent = setting?.tdsPercent || 2;
+//   const adminChargePercent = setting?.adminChargePercent || 5;
+//   const { cycleStart, cycleEnd } = getPayoutCycle(referenceDate);
+//   const agents = await User.find({ role: "agent", status: "active" });
+//   const results = [];
+//   console.log("this is working",cycleStart, cycleEnd);
+
+//   for (const agent of agents) {
+//     const existing = await Payout.findOne({
+//       user: agent._id,
+//       cycleStart,
+//       cycleEnd,
+//     });
+//     if (existing) continue;
+
+//     const histories = await IncomeHistory.find({
+//       user: agent._id,
+//       payout: null,
+//       createdAt: { $gte: cycleStart, $lte: cycleEnd },
+//     });
+
+//     if (histories.length === 0) continue;
+
+//     const breakdown = {
+//       directIncome: 0,
+//       differenceIncome: 0,
+//       matchingIncome: 0,
+//       royaltyIncome: 0,
+//       cashbackIncome: 0,
+//       bestPerformanceIncome: 0,
+//       festivalBonusIncome: 0,
+//       referralIncome: 0,
+//       rewardIncome: 0,
+//     };
+
+//     for (const h of histories) {
+//       const field = TYPE_FIELD_MAP[h.type];
+//       if (field) breakdown[field] += h.amount;
+//     }
+
+//     const grossAmount = Object.values(breakdown).reduce((a, b) => a + b, 0);
+//     if (grossAmount <= 0) continue;
+
+//     const tdsAmount = (grossAmount * tdsPercent) / 100;
+//     const adminChargeAmount = (grossAmount * adminChargePercent) / 100;
+//     const netAmount = grossAmount - tdsAmount - adminChargeAmount;
+
+//     const payout = await Payout.create({
+//       user: agent._id,
+//       cycleStart,
+//       cycleEnd,
+//       ...breakdown,
+//       grossAmount,
+//       tdsPercent: tdsPercent,
+//       tdsAmount,
+//       adminChargePercent: adminChargePercent,
+//       adminChargeAmount,
+//       netAmount,
+//       status: "released",
+//     });
+
+//     await IncomeHistory.updateMany(
+//       { _id: { $in: histories.map((h) => h._id) } },
+//       { $set: { payout: payout._id } },
+//     );
+
+//     results.push(payout);
+//   }
+//   return results;
+// };
+
+// module.exports = generatePayouts;
+
+const User = require("../models/User");
+const IncomeHistory = require("../models/IncomeHistory");
+const Payout = require("../models/Payout");
+const getPayoutCycle = require("../utils/getPayoutCycle");
+const getSixMonthCycle = require("../utils/getSixMonthCycle");
+const PayoutSetting = require("../models/PayoutSetting");
+const distributeBestPerformanceIncome = require("./distributeBestPerformanceIncome");
+
+const REGULAR_TYPE_FIELD_MAP = {
+  direct_income: "directIncome",
+  difference_income: "differenceIncome",
+  cashback_income: "cashbackIncome",
+  best_performance_income: "bestPerformanceIncome",
+  festival_bonus_income: "festivalBonusIncome",
+  referal_income: "referralIncome",
+  reward_income: "rewardIncome",
+};
+
+const SIX_MONTH_TYPE_FIELD_MAP = {
+  matching_income: "matchingIncome",
+  royalty_income: "royaltyIncome",
+};
+
+const isSixMonthPayoutDate = (date) => {
+  const day = date.getDate();
+  const month = date.getMonth(); // 0 = Jan, 5 = Jun
+  return day === 1 && (month === 0 || month === 5);
+};
+
+const generatePayouts = async (referenceDate = new Date()) => {
+  const setting = await PayoutSetting.findOne();
+  const tdsPercent = setting?.tdsPercent || 2;
+  const adminChargePercent = setting?.adminChargePercent || 5;
+  const { cycleStart, cycleEnd } = getPayoutCycle(referenceDate);
+  const includeSixMonth = isSixMonthPayoutDate(referenceDate);
+  const agents = await User.find({ role: "agent", status: "active" });
+  const results = [];
+  console.log(
+    "this is working",
+    cycleStart,
+    cycleEnd,
+    "sixMonth:",
+    includeSixMonth,
+  );
+
+  for (const agent of agents) {
+    const existing = await Payout.findOne({
+      user: agent._id,
+      cycleStart,
+      cycleEnd,
+    });
+    if (existing) continue;
+
+    //-----------------------------------
+    // Regular 15-day income
+    //-----------------------------------
+
+    await distributeBestPerformanceIncome(referenceDate);
+    const regularHistories = await IncomeHistory.find({
+      user: agent._id,
+      payout: null,
+      type: { $in: Object.keys(REGULAR_TYPE_FIELD_MAP) },
+      createdAt: { $gte: cycleStart, $lte: cycleEnd },
+    });
+
+    //-----------------------------------
+    // Matching/royalty income, six-month cycle, only on Jan 1 / Jun 1
+    //-----------------------------------
+
+    let sixMonthHistories = [];
+    if (includeSixMonth) {
+      const { cycleStart: smStart, cycleEnd: smEnd } =
+        getSixMonthCycle(referenceDate);
+      sixMonthHistories = await IncomeHistory.find({
+        user: agent._id,
+        payout: null,
+        type: { $in: Object.keys(SIX_MONTH_TYPE_FIELD_MAP) },
+        createdAt: { $gte: smStart, $lte: smEnd },
+      });
+    }
+
+    const histories = [...regularHistories, ...sixMonthHistories];
+
+    if (histories.length === 0) continue;
+
+    const breakdown = {
+      directIncome: 0,
+      differenceIncome: 0,
+      matchingIncome: 0,
+      royaltyIncome: 0,
+      cashbackIncome: 0,
+      bestPerformanceIncome: 0,
+      festivalBonusIncome: 0,
+      referralIncome: 0,
+      rewardIncome: 0,
+    };
+
+    for (const h of histories) {
+      const field =
+        REGULAR_TYPE_FIELD_MAP[h.type] || SIX_MONTH_TYPE_FIELD_MAP[h.type];
+      if (field) breakdown[field] += h.amount;
+    }
+
+    const grossAmount = Object.values(breakdown).reduce((a, b) => a + b, 0);
+    if (grossAmount <= 0) continue;
+
+    const tdsAmount = (grossAmount * tdsPercent) / 100;
+    const adminChargeAmount = (grossAmount * adminChargePercent) / 100;
+    const netAmount = grossAmount - tdsAmount - adminChargeAmount;
+
+    const payout = await Payout.create({
+      user: agent._id,
+      cycleStart,
+      cycleEnd,
+      ...breakdown,
+      grossAmount,
+      tdsPercent,
+      tdsAmount,
+      adminChargePercent,
+      adminChargeAmount,
+      netAmount,
+      status: "released",
+    });
+
+    await IncomeHistory.updateMany(
+      { _id: { $in: histories.map((h) => h._id) } },
+      { $set: { payout: payout._id } },
+    );
+
+    results.push(payout);
+  }
+  return results;
+};
+
+module.exports = generatePayouts;

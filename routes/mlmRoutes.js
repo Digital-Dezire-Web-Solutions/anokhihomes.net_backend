@@ -6,9 +6,10 @@ const fetchuser = require("../middleware/fetchUser");
 const User = require("../models/User");
 const IncomeHistory = require("../models/IncomeHistory");
 const WalletTransaction = require("../models/WalletTransaction");
-const rankSlabs = require("../models/RankSlab");
+const rankSlabs = require("../utils/rankSlabs");
 const Payout = require("../models/Payout");
 const UserReward = require("../models/UserReward");
+const PayoutSetting = require("../models/PayoutSetting");
 
 /* =================================
    WALLET HISTORY
@@ -246,6 +247,9 @@ router.get("/dashboard", fetchuser, async (req, res) => {
 
 router.get("/commission/summary", fetchuser, async (req, res) => {
   try {
+    const setting = await PayoutSetting.findOne();
+    const tdsPercent = setting?.tdsPercent || 2;
+    const adminChargePercent = setting?.adminChargePercent || 5;
     const loggedUser = await User.findById(req.user.id);
     let users = [];
 
@@ -255,7 +259,7 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
 
     if (loggedUser.role === "admin") {
       users = await User.find({
-        role: "agent",
+        role: { $in: ["admin", "agent"] },
       }).select(`
         name
         email
@@ -279,6 +283,7 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
         averageRating
         totalRatings
         badge
+        role
       `);
     }
 
@@ -315,6 +320,7 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
         averageRating
         totalRatings
         badge
+        role
       `);
     }
 
@@ -381,10 +387,6 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
           .filter((i) => i.type === "referal_income")
           .reduce((sum, i) => sum + i.amount, 0);
 
-        const rewardIncome = histories
-          .filter((i) => i.type === "reward_income")
-          .reduce((sum, i) => sum + i.amount, 0);
-
         const royaltyIncome = histories
           .filter((i) => i.type === "royalty_income")
           .reduce((sum, i) => sum + i.amount, 0);
@@ -393,9 +395,19 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
           .filter((i) => i.type === "cashback_income")
           .reduce((sum, i) => sum + i.amount, 0);
 
-        const bestPerformanceIncome = histories
-          .filter((i) => i.type === "best_performance_income")
-          .reduce((sum, i) => sum + i.amount, 0);
+        //------------------------------------------------------
+        // Best Performer (highest totalBusiness among users in scope)
+        //------------------------------------------------------
+
+        const agentsOnly = users.filter((u) => u.role === "agent");
+
+        const topAgent = agentsOnly.reduce((max, u) => {
+          if (!max) return u;
+          return u.selfBusiness > max.selfBusiness ? u : max;
+        }, null);
+
+        const bestPerformanceIncome = `${topAgent._id ===user._id ? topAgent.selfBusiness * 0.01 : 0}`;
+        // console.log(topAgent,"user")
 
         //------------------------------------------------------
         // Total Income
@@ -406,7 +418,6 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
           differenceIncome +
           matchingIncome +
           referralIncome +
-          rewardIncome +
           royaltyIncome +
           cashbackIncome +
           bestPerformanceIncome;
@@ -442,6 +453,12 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
           walletHold: user.walletHold,
           totalIncome: user.totalIncome,
         };
+
+        const tdsAmount = (creditedCommission * tdsPercent) / 100;
+        const adminChargeAmount =
+          (creditedCommission * adminChargePercent) / 100;
+        const payableAmount =
+          creditedCommission - tdsAmount - adminChargeAmount;
 
         //------------------------------------------------------
         // Business Summary
@@ -612,13 +629,15 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
           differenceIncome,
           matchingIncome,
           referralIncome,
-          rewardIncome,
           royaltyIncome,
           cashbackIncome,
           bestPerformanceIncome,
           totalCommission,
           pendingCommission,
           creditedCommission,
+          tdsAmount: `${user.role === "admin" ? 0 : tdsAmount}`,
+          adminChargeAmount: `${user.role === "admin" ? 0 : adminChargeAmount}`,
+          payableAmount: `${user.role === "admin" ? creditedCommission : payableAmount}`,
         };
 
         //------------------------------------------------------
@@ -627,6 +646,8 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
 
         return {
           ...user.toObject(),
+          tdsPercent,
+          adminChargePercent,
           walletSummary,
           businessSummary,
           rankSummary,

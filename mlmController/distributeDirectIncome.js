@@ -271,7 +271,7 @@ const distributeDirectIncome = async (
     =====================================================
     */
 
-    user.walletHold += totalIncome;
+    // user.wallet += totalIncome;
 
     const { cycleStart, cycleEnd } =
       getCurrentCycle();

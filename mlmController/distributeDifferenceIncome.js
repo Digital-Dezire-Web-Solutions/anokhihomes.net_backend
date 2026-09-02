@@ -147,7 +147,6 @@ const distributeDifferenceIncome = async (
           (businessAmount * difference) / 100;
 
         // parent.wallet += income;
-        parent.walletHold += income;
 
         const { cycleStart, cycleEnd } =
           getCurrentCycle();
