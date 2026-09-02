@@ -3,6 +3,7 @@ const router = express.Router();
 
 const Payout = require("../models/Payout");
 const User = require("../models/User");
+const IncomeHistory = require("../models/IncomeHistory");
 const fetchuser = require("../middleware/fetchUser");
 const generatePayouts = require("../mlmController/generatePayouts");
 const { notifyUser } = require("../utils/notify");
@@ -10,7 +11,8 @@ const { notifyUser } = require("../utils/notify");
 router.post("/generate", fetchuser, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    if (user.role !== "admin")
+      return res.status(403).json({ message: "Admin only" });
 
     const referenceDate = req.body.date ? new Date(req.body.date) : new Date();
     const payouts = await generatePayouts(referenceDate);
@@ -34,16 +36,55 @@ router.get("/", fetchuser, async (req, res) => {
   }
 });
 
+//------------------------------------------------------
+// GET ONE PAYOUT + the IncomeHistory rows it was built from
+// (this is the ONLY route that returns histories — scoped
+// to a single payout, not the whole account)
+//------------------------------------------------------
+
 router.get("/:id", fetchuser, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    const payout = await Payout.findById(req.params.id).populate("user", "name email referralId");
+
+    const payout = await Payout.findById(req.params.id).populate(
+      "user",
+      "name email referralId",
+    );
     if (!payout) return res.status(404).json({ message: "Payout not found" });
-    if (user.role !== "admin" && payout.user._id.toString() !== user._id.toString()) {
+
+    if (
+      user.role !== "admin" &&
+      payout.user._id.toString() !== user._id.toString()
+    ) {
       return res.status(403).json({ message: "Access denied" });
     }
-    res.json(payout);
+
+    //-----------------------------------
+    // Only the IncomeHistory rows tied to THIS payout,
+    // for THIS payout's user
+    //-----------------------------------
+
+    const histories = await IncomeHistory.find({
+      user: payout.user._id,
+    })
+      .populate("fromUser", "name referralId")
+      .populate("payment", "receiptNo amount")
+      .sort({ createdAt: 1 });
+
+    const historiesByType = histories.reduce((acc, h) => {
+      if (!acc[h.type]) acc[h.type] = [];
+      acc[h.type].push(h);
+      return acc;
+    }, {});
+
+    res.json({
+      ...payout.toObject(),
+      histories,
+      historiesByType,
+      historyCount: histories.length,
+    });
   } catch (error) {
+    console.log(error);
     res.status(500).send("Server Error");
   }
 });
@@ -51,11 +92,13 @@ router.get("/:id", fetchuser, async (req, res) => {
 router.put("/pay/:id", fetchuser, async (req, res) => {
   try {
     const admin = await User.findById(req.user.id);
-    if (admin.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    if (admin.role !== "admin")
+      return res.status(403).json({ message: "Admin only" });
 
     const payout = await Payout.findById(req.params.id);
     if (!payout) return res.status(404).json({ message: "Payout not found" });
-    if (payout.status === "paid") return res.status(400).json({ message: "Already paid" });
+    if (payout.status === "paid")
+      return res.status(400).json({ message: "Already paid" });
 
     const agent = await User.findById(payout.user);
     if (!agent) return res.status(404).json({ message: "Agent not found" });
