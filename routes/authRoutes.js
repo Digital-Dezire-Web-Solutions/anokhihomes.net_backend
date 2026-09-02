@@ -960,6 +960,11 @@ router.get("/income-history", fetchuser, async (req, res) => {
       .populate("user", "name email phone referralId designation")
       .populate("fromUser", "name email phone referralId designation")
       .populate({
+        path: "from",
+        select: "colony plot",
+        populate: [{ path: "colony", select: "name" }],
+      })
+      .populate({
         path: "payment",
         select: "customer approvedBy paymentDate amount paymentType",
         populate: [
