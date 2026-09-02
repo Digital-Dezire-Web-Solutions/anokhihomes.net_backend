@@ -220,6 +220,8 @@ const generatePayouts = async (referenceDate = new Date()) => {
       { $set: { payout: payout._id } },
     );
 
+    agent.wallet += netAmount;
+    await agent.save();
     results.push(payout);
   }
   return results;
