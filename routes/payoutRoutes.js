@@ -94,7 +94,12 @@ router.put("/pay/:id", fetchuser, async (req, res) => {
     const admin = await User.findById(req.user.id);
     if (admin.role !== "admin")
       return res.status(403).json({ message: "Admin only" });
-
+    const { paymentMode, transactionId, attachment, remark } = req.body;
+    if (!paymentMode) {
+      return res.status(400).json({
+        message: "Payment mode is required",
+      });
+    }
     const payout = await Payout.findById(req.params.id);
     if (!payout) return res.status(404).json({ message: "Payout not found" });
     if (payout.status === "paid")
@@ -109,6 +114,11 @@ router.put("/pay/:id", fetchuser, async (req, res) => {
     agent.totalWithdraw += payout.netAmount;
     await agent.save();
 
+    payout.paymentMode = paymentMode;
+    payout.transactionId = transactionId || "";
+    payout.attachment = attachment || "";
+    payout.remark = remark || "";
+
     payout.status = "paid";
     payout.paidAt = new Date();
     payout.paidBy = admin._id;
@@ -117,7 +127,7 @@ router.put("/pay/:id", fetchuser, async (req, res) => {
     await notifyUser({
       user: agent._id,
       sender: admin._id,
-      title: "Payout released",
+      title: "Payout paid",
       message: `Your payout of ₹${payout.netAmount} for ${payout.cycleStart.toDateString()} - ${payout.cycleEnd.toDateString()} has been paid.`,
       type: "payout",
       referenceId: payout._id,

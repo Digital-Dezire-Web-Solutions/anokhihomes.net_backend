@@ -275,34 +275,37 @@ router.get("/my-connected-users", fetchuser, async (req, res) => {
     }).select("_id");
 
     // =========================================
-    // GET CUSTOMERS FROM LEADS
-    // Lead.agent -> Lead.customer
+    // GET LEADS FOR THIS AGENT, NEWEST FIRST
     // =========================================
 
     const leads = await Lead.find({
       agent: agentId,
       customer: { $ne: null },
-    }).select("customer");
+    })
+      .select("customer status createdAt")
+      .sort({ createdAt: -1 });
 
     // =========================================
-    // GET CUSTOMERS FROM SITE VISITS
-    // SiteVisit.agent -> SiteVisit.customer
+    // GET SITE VISITS FOR THIS AGENT, NEWEST FIRST
     // =========================================
 
     const siteVisits = await SiteVisit.find({
       agent: agentId,
       customer: { $ne: null },
-    }).select("customer");
+    })
+      .select("customer status createdAt")
+      .sort({ createdAt: -1 });
 
     // =========================================
-    // GET CUSTOMERS FROM BOOKINGS
-    // Booking.agent -> Booking.customer
+    // GET BOOKINGS FOR THIS AGENT, NEWEST FIRST
     // =========================================
 
     const bookings = await Booking.find({
       agent: agentId,
       customer: { $ne: null },
-    }).select("customer");
+    })
+      .select("customer status createdAt")
+      .sort({ createdAt: -1 });
 
     // =========================================
     // COMBINE CUSTOMER IDS
@@ -310,11 +313,8 @@ router.get("/my-connected-users", fetchuser, async (req, res) => {
 
     const customerIds = [
       ...createdUsers.map((user) => user._id),
-
       ...leads.map((lead) => lead.customer),
-
       ...siteVisits.map((visit) => visit.customer),
-
       ...bookings.map((booking) => booking.customer),
     ];
 
@@ -325,6 +325,83 @@ router.get("/my-connected-users", fetchuser, async (req, res) => {
     const uniqueCustomerIds = [
       ...new Set(customerIds.map((id) => id.toString())),
     ];
+
+    // =========================================
+    // LATEST LEAD / SITE VISIT / BOOKING PER CUSTOMER
+    // Each array is already sorted newest-first, so the FIRST
+    // match found per customer is the latest.
+    // =========================================
+
+    const latestLeadByCustomer = {};
+    for (const lead of leads) {
+      const key = lead.customer.toString();
+      if (!latestLeadByCustomer[key]) {
+        latestLeadByCustomer[key] = {
+          status: lead.status,
+          date: lead.createdAt,
+        };
+      }
+    }
+
+    const latestSiteVisitByCustomer = {};
+    for (const visit of siteVisits) {
+      const key = visit.customer.toString();
+      if (!latestSiteVisitByCustomer[key]) {
+        latestSiteVisitByCustomer[key] = {
+          status: visit.status,
+          date: visit.createdAt,
+        };
+      }
+    }
+
+    const latestBookingByCustomer = {};
+    for (const booking of bookings) {
+      const key = booking.customer.toString();
+      if (!latestBookingByCustomer[key]) {
+        latestBookingByCustomer[key] = {
+          status: booking.status,
+          date: booking.createdAt,
+        };
+      }
+    }
+
+    // =========================================
+    // COLLAPSE INTO ONE "STAGE" PER CUSTOMER
+    // Funnel chain: lead -> site visit -> booking.
+    // A booking implies the earlier stages already
+    // happened, so it takes priority; site visit is
+    // next; lead is the fallback if neither exists.
+    // =========================================
+
+    const stageByCustomer = {};
+
+    for (const key of uniqueCustomerIds) {
+      const booking = latestBookingByCustomer[key];
+      const siteVisit = latestSiteVisitByCustomer[key];
+      const lead = latestLeadByCustomer[key];
+
+      if (booking) {
+        stageByCustomer[key] = {
+          type: "booking",
+          status: booking.status,
+          date: booking.date,
+        };
+      } else if (siteVisit) {
+        stageByCustomer[key] = {
+          type: "site_visit",
+          status: siteVisit.status,
+          date: siteVisit.date,
+        };
+      } else if (lead) {
+        stageByCustomer[key] = {
+          type: "lead",
+          status: lead.status,
+          date: lead.date,
+        };
+      } else {
+        stageByCustomer[key] = null; // customer added directly, no funnel activity yet
+      }
+    }
 
     // =========================================
     // GET ONLY USERS
@@ -340,13 +417,26 @@ router.get("/my-connected-users", fetchuser, async (req, res) => {
       .populate("createdBy", "name referralId designation");
 
     // =========================================
+    // ATTACH STAGE PER CUSTOMER
+    // =========================================
+
+    const usersWithStage = users.map((user) => {
+      const key = user._id.toString();
+
+      return {
+        ...user.toObject(),
+        stage: stageByCustomer[key] || null,
+      };
+    });
+
+    // =========================================
     // RESPONSE
     // =========================================
 
     return res.json({
       success: true,
-      count: users.length,
-      users,
+      count: usersWithStage.length,
+      users: usersWithStage,
     });
   } catch (error) {
     console.error("Get connected customers error:", error);
@@ -357,6 +447,8 @@ router.get("/my-connected-users", fetchuser, async (req, res) => {
     });
   }
 });
+
+
 
 // router.get("/check-email/:email", async (req, res) => {
 //   try {

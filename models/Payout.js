@@ -29,9 +29,16 @@ const payoutSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["hold", "released", "paid", "cancelled"],
-      default: "hold",
+      enum: ["released", "paid", "cancelled"],
+      default: "released",
     },
+    paymentMode: {
+      type: String,
+      enum: ["cash", "upi", "bank", "cheque"],
+    },
+    transactionId: String,
+
+    attachment: String,
 
     paidAt: Date,
     paidBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
