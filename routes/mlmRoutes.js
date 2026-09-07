@@ -514,11 +514,11 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
           totalIncome: user.totalIncome,
         };
 
-        const tdsAmount = (creditedCommission * tdsPercent) / 100;
+        const tdsAmount = (totalCommission * tdsPercent) / 100;
         const adminChargeAmount =
-          (creditedCommission * adminChargePercent) / 100;
+          (totalCommission * adminChargePercent) / 100;
         const payableAmount =
-          creditedCommission - tdsAmount - adminChargeAmount;
+          totalCommission - tdsAmount - adminChargeAmount;
 
         //------------------------------------------------------
         // Business Summary
