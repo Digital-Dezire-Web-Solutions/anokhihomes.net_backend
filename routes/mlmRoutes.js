@@ -575,7 +575,7 @@ router.get("/commission/summary", fetchuser, async (req, res) => {
           directIncomePercent: user.directIncomePercent,
           currentRate: currentSlab.directIncome,
           nextDesignation: nextSlab?.designation || null,
-          nextTarget: nextSlab?.min || null,
+          nextTarget: currentSlab?.max || null,
           remainingForNextRank: nextSlab ? nextSlab.min - user.selfBusiness : 0,
           progress: Math.round(progress),
         };
