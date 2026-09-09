@@ -3,7 +3,7 @@ const User = require("../models/User");
 const getTeamTree = async (userId) => {
   const user = await User.findById(userId)
     .select(
-      "name phone referralId position designation selfBusiness directIncomePercent level status wallet totalIncome leftChildren rightChildren",
+      "name phone referralId position designation selfBusiness leftBusiness rightBusiness totalBusiness directIncomePercent level status wallet totalIncome leftChildren rightChildren",
     )
     .populate(
       "leftChildren",

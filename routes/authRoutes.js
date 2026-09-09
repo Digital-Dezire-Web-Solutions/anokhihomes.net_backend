@@ -448,8 +448,6 @@ router.get("/my-connected-users", fetchuser, async (req, res) => {
   }
 });
 
-
-
 // router.get("/check-email/:email", async (req, res) => {
 //   try {
 //     const email = req.params.email.toLowerCase().trim();
@@ -1090,7 +1088,6 @@ router.get("/team-tree/:referralId", fetchuser, async (req, res) => {
     const rootUser = await User.findOne({
       referralId: req.params.referralId,
     });
-
     if (!rootUser) {
       return res.status(404).json({
         msg: "User not found",
@@ -1098,7 +1095,6 @@ router.get("/team-tree/:referralId", fetchuser, async (req, res) => {
     }
 
     const tree = await getTeamTree(rootUser._id);
-
     res.json(tree);
   } catch (error) {
     console.log(error);
