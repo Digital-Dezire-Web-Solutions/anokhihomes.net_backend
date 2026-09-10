@@ -36,6 +36,26 @@ const getTeamTree = async (userId) => {
     user.rightChildren.map((child) => getTeamTree(child._id)),
   );
 
+  // Count nodes in a subtree
+  const countNodes = (nodes) => {
+    let count = 0;
+
+    for (const node of nodes) {
+      if (!node) continue;
+
+      count += 1;
+
+      count += countNodes(node.leftChildren || []);
+      count += countNodes(node.rightChildren || []);
+    }
+
+    return count;
+  };
+
+  userObj.totalLeftTeam = countNodes(userObj.leftChildren);
+  userObj.totalRightTeam = countNodes(userObj.rightChildren);
+  userObj.totalTeam = userObj.totalLeftTeam + userObj.totalRightTeam;
+
   return userObj;
 };
 
