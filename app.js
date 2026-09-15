@@ -16,6 +16,8 @@ require("./cron/notificationCron");
 
 const express = require("express");
 const cors = require("cors");
+const startPayoutCron = require("./cron/payoutCron");
+startPayoutCron();
 
 // Connect to MongoDB
 const app = express();
