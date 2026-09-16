@@ -1,50 +1,57 @@
 const User = require("../models/User");
 const IncomeHistory = require("../models/IncomeHistory");
 const WalletTransaction = require("../models/WalletTransaction");
+const Payment = require("../models/Payment");
 const getPayoutCycle = require("../utils/getPayoutCycle");
 
 const distributeBestPerformanceIncome = async (referenceDate = new Date()) => {
   try {
-    const day = referenceDate.getDate();
-    // day 1 settles cycle2Business (16th–end of prior month)
-    // day 16 settles cycle1Business (1st–15th of this month)
-    const cycle = day === 16 ? 1 : 2;
-    const sortField = cycle === 1 ? "cycle1Business" : "cycle2Business";
-
-    const winner = await User.findOne({
-      role: "agent",
-      status: "active",
-    }).sort({ [sortField]: -1 });
-
-    if (!winner) return null;
-
-    const business = winner[sortField];
-    if (business <= 0) return null;
+    const { cycleStart, cycleEnd } = getPayoutCycle(referenceDate);
 
     //-----------------------------------
-    // Duplicate guard: has this agent already been paid
+    // Duplicate guard FIRST: has any agent already been paid
     // best-performer for this exact cycle window?
     //-----------------------------------
 
-    const { cycleStart, cycleEnd } = getPayoutCycle(referenceDate);
-
     const alreadyPaid = await IncomeHistory.findOne({
-      user: winner._id,
       type: "best_performance_income",
       creditedAt: { $gte: cycleStart, $lte: cycleEnd },
     });
     if (alreadyPaid) {
-      // still reset the counter so it doesn't carry into the next cycle
-      winner[sortField] = 0;
-      await winner.save();
+      return null;
+    }
+
+    const topAgentAgg = await Payment.aggregate([
+      {
+        $match: {
+          status: "approved",
+          paymentDate: { $gte: cycleStart, $lte: cycleEnd },
+          agent: { $ne: null },
+        },
+      },
+      {
+        $group: {
+          _id: "$agent",
+          totalBusiness: { $sum: "$amount" },
+        },
+      },
+      { $sort: { totalBusiness: -1 } },
+      { $limit: 1 },
+    ]);
+
+    if (!topAgentAgg.length) return null;
+
+    const { _id: winnerId, totalBusiness: business } = topAgentAgg[0];
+    if (!business || business <= 0) return null;
+
+    const winner = await User.findById(winnerId);
+    if (!winner || winner.role !== "agent" || winner.status !== "active") {
       return null;
     }
 
     const amount = business * 0.01;
 
-    // winner.wallet += amount;
     winner.totalIncome += amount;
-    winner[sortField] = 0;
     await winner.save();
 
     await WalletTransaction.create({
@@ -58,6 +65,11 @@ const distributeBestPerformanceIncome = async (referenceDate = new Date()) => {
       isSettled: false,
     });
 
+    // Stamp with a time anchored to the cycle itself (not real "now"),
+    // so this row always falls inside [cycleStart, cycleEnd] regardless
+    // of when the cron actually executes.
+    const anchoredAt = cycleEnd < referenceDate ? cycleEnd : referenceDate;
+
     const history = await IncomeHistory.create({
       user: winner._id,
       type: "best_performance_income",
@@ -65,7 +77,8 @@ const distributeBestPerformanceIncome = async (referenceDate = new Date()) => {
       percentage: 1,
       amount,
       status: "credited",
-      creditedAt: new Date(),
+      creditedAt: anchoredAt,
+      createdAt: anchoredAt,
     });
 
     console.log(`${winner.name} got best performance income ₹${amount}`);

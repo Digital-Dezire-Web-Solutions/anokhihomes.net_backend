@@ -1,96 +1,3 @@
-// const User = require("../models/User");
-// const IncomeHistory = require("../models/IncomeHistory");
-// const Payout = require("../models/Payout");
-// const getPayoutCycle = require("../cron/getPayoutCycle");
-// const PayoutSetting = require("../models/PayoutSetting");
-
-// const TYPE_FIELD_MAP = {
-//   direct_income: "directIncome",
-//   difference_income: "differenceIncome",
-//   matching_income: "matchingIncome",
-//   royalty_income: "royaltyIncome",
-//   cashback_income: "cashbackIncome",
-//   best_performance_income: "bestPerformanceIncome",
-//   festival_bonus_income: "festivalBonusIncome",
-//   referal_income: "referralIncome",
-//   reward_income: "rewardIncome",
-// };
-
-// const generatePayouts = async (referenceDate = new Date()) => {
-//   const setting = await PayoutSetting.findOne();
-//   const tdsPercent = setting?.tdsPercent || 2;
-//   const adminChargePercent = setting?.adminChargePercent || 5;
-//   const { cycleStart, cycleEnd } = getPayoutCycle(referenceDate);
-//   const agents = await User.find({ role: "agent", status: "active" });
-//   const results = [];
-//   console.log("this is working",cycleStart, cycleEnd);
-
-//   for (const agent of agents) {
-//     const existing = await Payout.findOne({
-//       user: agent._id,
-//       cycleStart,
-//       cycleEnd,
-//     });
-//     if (existing) continue;
-
-//     const histories = await IncomeHistory.find({
-//       user: agent._id,
-//       payout: null,
-//       createdAt: { $gte: cycleStart, $lte: cycleEnd },
-//     });
-
-//     if (histories.length === 0) continue;
-
-//     const breakdown = {
-//       directIncome: 0,
-//       differenceIncome: 0,
-//       matchingIncome: 0,
-//       royaltyIncome: 0,
-//       cashbackIncome: 0,
-//       bestPerformanceIncome: 0,
-//       festivalBonusIncome: 0,
-//       referralIncome: 0,
-//       rewardIncome: 0,
-//     };
-
-//     for (const h of histories) {
-//       const field = TYPE_FIELD_MAP[h.type];
-//       if (field) breakdown[field] += h.amount;
-//     }
-
-//     const grossAmount = Object.values(breakdown).reduce((a, b) => a + b, 0);
-//     if (grossAmount <= 0) continue;
-
-//     const tdsAmount = (grossAmount * tdsPercent) / 100;
-//     const adminChargeAmount = (grossAmount * adminChargePercent) / 100;
-//     const netAmount = grossAmount - tdsAmount - adminChargeAmount;
-
-//     const payout = await Payout.create({
-//       user: agent._id,
-//       cycleStart,
-//       cycleEnd,
-//       ...breakdown,
-//       grossAmount,
-//       tdsPercent: tdsPercent,
-//       tdsAmount,
-//       adminChargePercent: adminChargePercent,
-//       adminChargeAmount,
-//       netAmount,
-//       status: "released",
-//     });
-
-//     await IncomeHistory.updateMany(
-//       { _id: { $in: histories.map((h) => h._id) } },
-//       { $set: { payout: payout._id } },
-//     );
-
-//     results.push(payout);
-//   }
-//   return results;
-// };
-
-// module.exports = generatePayouts;
-
 const User = require("../models/User");
 const IncomeHistory = require("../models/IncomeHistory");
 const Payout = require("../models/Payout");
@@ -126,7 +33,10 @@ const generatePayouts = async (referenceDate = new Date()) => {
   const adminChargePercent = setting?.adminChargePercent || 5;
   const { cycleStart, cycleEnd } = getPayoutCycle(referenceDate);
   const includeSixMonth = isSixMonthPayoutDate(referenceDate);
-  const agents = await User.find({ role: "agent", status: "active" });
+  const agents = await User.find({
+    role: { $in: ["agent", "admin"] },
+    status: "active",
+  });
   const results = [];
   console.log(
     "this is working",
@@ -135,6 +45,7 @@ const generatePayouts = async (referenceDate = new Date()) => {
     "sixMonth:",
     includeSixMonth,
   );
+  await distributeBestPerformanceIncome(referenceDate);
 
   for (const agent of agents) {
     const existing = await Payout.findOne({
@@ -144,11 +55,12 @@ const generatePayouts = async (referenceDate = new Date()) => {
     });
     if (existing) continue;
 
+    const isAdmin = agent.role === "admin";
+
     //-----------------------------------
     // Regular 15-day income
     //-----------------------------------
 
-    await distributeBestPerformanceIncome(referenceDate);
     const regularHistories = await IncomeHistory.find({
       user: agent._id,
       payout: null,
@@ -197,8 +109,11 @@ const generatePayouts = async (referenceDate = new Date()) => {
     const grossAmount = Object.values(breakdown).reduce((a, b) => a + b, 0);
     if (grossAmount <= 0) continue;
 
-    const tdsAmount = (grossAmount * tdsPercent) / 100;
-    const adminChargeAmount = (grossAmount * adminChargePercent) / 100;
+    const appliedTdsPercent = isAdmin ? 0 : tdsPercent;
+    const appliedAdminChargePercent = isAdmin ? 0 : adminChargePercent;
+
+    const tdsAmount = (grossAmount * appliedTdsPercent) / 100;
+    const adminChargeAmount = (grossAmount * appliedAdminChargePercent) / 100;
     const netAmount = grossAmount - tdsAmount - adminChargeAmount;
 
     const payout = await Payout.create({
@@ -207,9 +122,9 @@ const generatePayouts = async (referenceDate = new Date()) => {
       cycleEnd,
       ...breakdown,
       grossAmount,
-      tdsPercent,
+      tdsPercent: appliedTdsPercent,
       tdsAmount,
-      adminChargePercent,
+      adminChargePercent: appliedAdminChargePercent,
       adminChargeAmount,
       netAmount,
       status: "released",
