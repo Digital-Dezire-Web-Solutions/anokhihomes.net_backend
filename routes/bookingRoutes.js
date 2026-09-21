@@ -11,6 +11,7 @@ const Payment = require("../models/Payment");
 const PlotHold = require("../models/PlotHold");
 const { notifyUser, notifyAdmins } = require("../utils/notify");
 const updateAgentRating = require("../utils/updateAgentRating");
+const getDownlineIds = require("../utils/getDownlineIds");
 
 router.get("/", fetchuser, async (req, res) => {
   try {
@@ -21,7 +22,8 @@ router.get("/", fetchuser, async (req, res) => {
     if (user.role === "admin" || user.role === "staff") {
       query = {};
     } else if (user.role === "agent") {
-      query = { agent: user._id };
+      const downlineIds = await getDownlineIds(user._id);
+      query = { agent: { $in: [user._id, ...downlineIds] } };
     } else if (user.role === "user") {
       query = { customer: user._id };
     }

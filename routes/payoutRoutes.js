@@ -7,6 +7,7 @@ const IncomeHistory = require("../models/IncomeHistory");
 const fetchuser = require("../middleware/fetchUser");
 const generatePayouts = require("../mlmController/generatePayouts");
 const { notifyUser } = require("../utils/notify");
+const getDownlineIds = require("../utils/getDownlineIds");
 
 router.post("/generate", fetchuser, async (req, res) => {
   try {
@@ -23,10 +24,34 @@ router.post("/generate", fetchuser, async (req, res) => {
   }
 });
 
+// router.get("/", fetchuser, async (req, res) => {
+//   try {
+//     const user = await User.findById(req.user.id);
+//     const query = user.role === "admin" ? {} : { user: user._id };
+//     const payouts = await Payout.find(query)
+//       .populate("user", "name email referralId")
+//       .sort({ cycleStart: -1 });
+//     res.json(payouts);
+//   } catch (error) {
+//     res.status(500).send("Server Error");
+//   }
+// });
+
 router.get("/", fetchuser, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    const query = user.role === "admin" ? {} : { user: user._id };
+
+    let query = {};
+
+    if (user.role === "admin") {
+      query = {};
+    } else if (user.role === "agent") {
+      const downlineIds = await getDownlineIds(user._id);
+      query = { user: { $in: [user._id, ...downlineIds] } };
+    } else {
+      query = { user: user._id };
+    }
+
     const payouts = await Payout.find(query)
       .populate("user", "name email referralId")
       .sort({ cycleStart: -1 });

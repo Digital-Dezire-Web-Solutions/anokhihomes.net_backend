@@ -18,6 +18,7 @@ const generateReceiptNo = require("../utils/generateReceiptNo");
 const generateReceipt = require("../utils/generateReceipt");
 const { notifyUser, notifyAdmins } = require("../utils/notify");
 const { formatCurrency } = require("../utils/formatCurrency");
+const getDownlineIds = require("../utils/getDownlineIds");
 
 // =========================
 // GET ALL PAYMENTS
@@ -31,7 +32,8 @@ router.get("/", fetchuser, async (req, res) => {
     if (user.role === "admin" || user.role === "staff") {
       query = {};
     } else if (user.role === "agent") {
-      query = { agent: user._id };
+      const downlineIds = await getDownlineIds(user._id);
+      query = { agent: { $in: [user._id, ...downlineIds] } };
     } else {
       query = { customer: user._id };
     }
