@@ -469,6 +469,12 @@ router.get("/check-email/:email", async (req, res) => {
     const email = req.params.email.toLowerCase().trim();
     const { role } = req.query;
 
+    if (!role) {
+      return res.status(400).json({
+        message: "Role is required to check email availability",
+      });
+    }
+
     const user = await User.findOne({
       email,
       role,
@@ -476,7 +482,9 @@ router.get("/check-email/:email", async (req, res) => {
 
     res.json({
       exists: !!user,
-      message: user ? `Email already registered as ${role}` : "Email available",
+      message: user
+        ? `Email already registered`
+        : "Email available",
     });
   } catch (error) {
     res.status(500).json({
@@ -488,13 +496,23 @@ router.get("/check-email/:email", async (req, res) => {
 router.get("/check-phone/:phone", async (req, res) => {
   try {
     const phone = req.params.phone.trim();
+    const { role } = req.query;
 
-    const user = await User.findOne({ phone });
+    if (!role) {
+      return res.status(400).json({
+        message: "Role is required to check phone availability",
+      });
+    }
+
+    const user = await User.findOne({
+      phone,
+      role,
+    });
 
     res.json({
       exists: !!user,
       message: user
-        ? "Phone number already registered"
+        ? `Phone number already registered`
         : "Phone number available",
     });
   } catch (error) {
