@@ -482,9 +482,7 @@ router.get("/check-email/:email", async (req, res) => {
 
     res.json({
       exists: !!user,
-      message: user
-        ? `Email already registered`
-        : "Email available",
+      message: user ? `Email already registered` : "Email available",
     });
   } catch (error) {
     res.status(500).json({
@@ -1074,7 +1072,7 @@ router.get("/income-history", fetchuser, async (req, res) => {
       })
       .populate({
         path: "payment",
-        select: "customer approvedBy paymentDate amount paymentType",
+        select: "customer approvedBy paymentDate amount paymentType booking",
         populate: [
           {
             path: "customer",
@@ -1087,6 +1085,16 @@ router.get("/income-history", fetchuser, async (req, res) => {
           { path: "paymentMode", select: "name" },
           { path: "paymentType", select: "name" },
           { path: "paymentDate", select: "name" },
+          {
+            path: "booking",
+            select: "colony",
+            populate: [
+              {
+                path: "colony",
+                select: "category",
+              },
+            ],
+          },
         ],
       })
       .sort({
