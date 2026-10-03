@@ -6,7 +6,6 @@ const User = require("../models/User");
 const Booking = require("../models/Booking");
 const fetchuser = require("../middleware/fetchUser");
 const Colony = require("../models/Colony");
-const WalletTransaction = require("../models/WalletTransaction");
 const updateBusinessTree = require("../mlmController/updateBusinessTree");
 const distributeDirectIncome = require("../mlmController/distributeDirectIncome");
 const distributeDifferenceIncome = require("../mlmController/distributeDifferenceIncome");
@@ -45,7 +44,7 @@ router.get("/", fetchuser, async (req, res) => {
         path: "booking",
         populate: [
           { path: "location", select: "name" },
-          { path: "colony", select: "name layout.plots" },
+          { path: "colony", select: "name category layout.plots" },
           { path: "agent", select: "name phone" },
           { path: "customer", select: "name phone" },
         ],
@@ -53,7 +52,7 @@ router.get("/", fetchuser, async (req, res) => {
       .populate({
         path: "hold",
         populate: [
-          { path: "colony", select: "name layout.plots" },
+          { path: "colony", select: "name category layout.plots" },
           { path: "agent", select: "name phone" },
           { path: "customer", select: "name phone" },
         ],
@@ -507,13 +506,6 @@ router.put("/withdraw/approve/:id", fetchuser, async (req, res) => {
   const user = await User.findById(request.user);
   user.wallet -= request.amount;
   user.totalWithdraw += request.amount;
-  await WalletTransaction.create({
-    user: user._id,
-    amount,
-    type: "debit",
-    source: "withdrawal",
-    remark: "Withdrawal Approved",
-  });
   await user.save();
   request.status = "approved";
   request.approvedBy = admin._id;

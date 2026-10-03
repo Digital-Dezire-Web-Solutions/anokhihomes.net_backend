@@ -6,7 +6,6 @@ const Payment = require("../models/Payment");
 
 const User = require("../models/User");
 const IncomeHistory = require("../models/IncomeHistory");
-const WalletTransaction = require("../models/WalletTransaction");
 const rankSlabs = require("../utils/rankSlabs");
 const Payout = require("../models/Payout");
 const UserReward = require("../models/UserReward");
@@ -39,50 +38,6 @@ async function getDownlineIds(userId) {
 
   return ids;
 }
-
-router.get("/history", fetchuser, async (req, res) => {
-  try {
-    const transactions = await WalletTransaction.find({
-      user: req.user.id,
-    }).sort({
-      createdAt: -1,
-    });
-
-    res.json(transactions);
-  } catch (error) {
-    console.log(error);
-
-    res.status(500).send("Internal Server Error");
-  }
-});
-
-/* =================================
-   ADMIN ALL WALLET HISTORY
-================================= */
-
-router.get("/all", fetchuser, async (req, res) => {
-  try {
-    const loggedUser = await User.findById(req.user.id);
-
-    if (loggedUser.role !== "admin") {
-      return res.status(403).json({
-        msg: "Access denied",
-      });
-    }
-
-    const transactions = await WalletTransaction.find()
-      .populate("user", "name phone email referralId designation")
-      .sort({
-        createdAt: -1,
-      });
-
-    res.json(transactions);
-  } catch (error) {
-    console.log(error);
-
-    res.status(500).send("Internal Server Error");
-  }
-});
 
 /* =================================
    MLM DASHBOARD
