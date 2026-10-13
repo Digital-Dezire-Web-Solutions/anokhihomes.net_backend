@@ -183,18 +183,35 @@ router.post("/add", fetchuser, async (req, res) => {
 
       await bookingDoc.save();
       if (!payment.mlmProcessed && bookingData.agent) {
+        // await updateBusinessTree(bookingData.agent, payment.amount);
+
+        // await distributeDirectIncome(
+        //   bookingData.agent,
+        //   payment.amount,
+        //   payment._id,
+        // );
+
+        // await distributeDifferenceIncome(
+        //   bookingData.agent,
+        //   payment.amount,
+        //   payment._id,
+        // );
+
+        // await distributeMatchingIncome(bookingData.agent);
         await updateBusinessTree(bookingData.agent, payment.amount);
 
-        await distributeDirectIncome(
-          bookingData.agent,
-          payment.amount,
-          payment._id,
-        );
+        const directSegments =
+          (await distributeDirectIncome(
+            bookingData.agent,
+            payment.amount,
+            payment._id,
+          )) || [];
 
         await distributeDifferenceIncome(
           bookingData.agent,
           payment.amount,
           payment._id,
+          directSegments,
         );
 
         await distributeMatchingIncome(bookingData.agent);
@@ -402,21 +419,39 @@ router.put("/action/:id", fetchuser, async (req, res) => {
       await booking.save();
 
       if (!payment.mlmProcessed && booking.agent) {
+        // await updateBusinessTree(booking.agent, payment.amount);
+
+        // await distributeDirectIncome(
+        //   booking.agent,
+        //   payment.amount,
+        //   payment._id,
+        // );
+
+        // await distributeDifferenceIncome(
+        //   booking.agent,
+        //   payment.amount,
+        //   payment._id,
+        // );
+
+        // await distributeMatchingIncome(booking.agent);
         await updateBusinessTree(booking.agent, payment.amount);
 
-        await distributeDirectIncome(
-          booking.agent,
-          payment.amount,
-          payment._id,
-        );
+        const directSegments =
+          (await distributeDirectIncome(
+            booking.agent,
+            payment.amount,
+            payment._id,
+          )) || [];
 
         await distributeDifferenceIncome(
           booking.agent,
           payment.amount,
           payment._id,
+          directSegments,
         );
 
         await distributeMatchingIncome(booking.agent);
+
         // await distributeRoyaltyIncome(booking._id, booking.agent);
         // await checkRewards(booking.agent);
 

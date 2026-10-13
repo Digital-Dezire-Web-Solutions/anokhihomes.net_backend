@@ -121,10 +121,6 @@ const distributeDirectIncome = async (agentId, businessAmount, paymentId) => {
         amount: seg.income,
         status: "credited",
         creditedAt,
-        remark:
-          i > 0 && segments[i - 1].percentage !== seg.percentage
-            ? `Slab changed from ${segments[i - 1].percentage}% to ${seg.percentage}%`
-            : "",
       })),
     );
 
@@ -135,6 +131,7 @@ const distributeDirectIncome = async (agentId, businessAmount, paymentId) => {
           .join(", ") +
         ")",
     );
+    return segments;
   } catch (error) {
     console.log("Direct income error:", error);
   }
