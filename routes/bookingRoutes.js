@@ -150,7 +150,7 @@ router.post("/add", fetchuser, async (req, res) => {
     const baseAmount = finalRate * plotData.area;
 
     const bookingAmount = baseAmount * 0.1;
-    const agreementAmount = baseAmount * 0.25;
+    const agreementAmount = baseAmount * 0.20;
     const fullAmount = baseAmount - bookingAmount - agreementAmount;
 
     const today = new Date();
@@ -187,14 +187,14 @@ router.post("/add", fetchuser, async (req, res) => {
         },
 
         agreement: {
-          percent: 25,
+          percent: 20,
           amount: agreementAmount,
           dueDays: Number(agreementDays),
           paid: false,
           date: agreementDate,
         },
         full: {
-          percent: 65,
+          percent: 70,
           amount: fullAmount,
           dueDays: Number(fullPaymentDays),
           paid: false,
