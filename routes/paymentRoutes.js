@@ -38,7 +38,7 @@ router.get("/", fetchuser, async (req, res) => {
     }
 
     const payments = await Payment.find(query)
-      .populate("customer", "name phone")
+      .populate("customer", "name phone referralId")
       .populate("agent", "name phone")
       .populate({
         path: "booking",
