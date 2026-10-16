@@ -26,8 +26,8 @@ const distributeLevelIncome = async (userId) => {
 
       if (parentUser.status === "active") {
         // CREDIT WALLET
-        parentUser.wallet += income;
-        parentUser.totalIncome += income;
+        // parentUser.wallet += income;
+        // parentUser.totalIncome += income;
 
         await parentUser.save();
 
@@ -59,8 +59,8 @@ const distributeLevelIncome = async (userId) => {
     if (admin) {
       const adminIncome = Math.max(joiningCharge - distributedAmount, 0);
 
-      admin.wallet += adminIncome;
-      admin.totalIncome += adminIncome;
+      // admin.wallet += adminIncome;
+      // admin.totalIncome += adminIncome;
 
       await admin.save();
 
