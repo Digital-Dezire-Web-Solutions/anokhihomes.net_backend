@@ -28,11 +28,20 @@ const isSixMonthPayoutDate = (date) => {
   return day === 1 && (month === 0 || month === 5);
 };
 
-const generatePayouts = async (referenceDate = new Date()) => {
+// const generatePayouts = async (referenceDate = new Date()) => {
+  const generatePayouts = async (
+  referenceDate = new Date(),
+  cycleOverride = null, // { cycleStart, cycleEnd } - optional, for manual/test runs
+) => {
   const setting = await PayoutSetting.findOne();
   const tdsPercent = setting?.tdsPercent || 2;
   const adminChargePercent = setting?.adminChargePercent || 5;
-  const { cycleStart, cycleEnd } = getPayoutCycle(referenceDate);
+  const { cycleStart, cycleEnd } =
+    cycleOverride || getPayoutCycle(referenceDate);
+  // const setting = await PayoutSetting.findOne();
+  // const tdsPercent = setting?.tdsPercent || 2;
+  // const adminChargePercent = setting?.adminChargePercent || 5;
+  // const { cycleStart, cycleEnd } = getPayoutCycle(referenceDate);
   const includeSixMonth = isSixMonthPayoutDate(referenceDate);
   const agents = await User.find({
     role: { $in: ["agent", "admin"] },
