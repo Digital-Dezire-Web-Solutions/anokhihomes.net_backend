@@ -92,7 +92,7 @@ router.post("/add", fetchuser, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
 
-    const { booking, amount, paymentMode, paymentType, transactionId } =
+    const { booking, amount, paymentMode, paymentType, transactionId, remark } =
       req.body;
 
     const bookingData = await Booking.findById(booking);
@@ -109,6 +109,7 @@ router.post("/add", fetchuser, async (req, res) => {
       paymentMode,
       paymentType,
       transactionId,
+      remark,
       paymentDate: new Date(),
       createdBy: user._id,
     };
