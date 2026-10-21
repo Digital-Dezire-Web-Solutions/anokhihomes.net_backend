@@ -13,6 +13,52 @@ const { notifyUser, notifyAdmins } = require("../utils/notify");
 const updateAgentRating = require("../utils/updateAgentRating");
 const getDownlineIds = require("../utils/getDownlineIds");
 
+const PLC_MIN = 5;
+const PLC_MAX = 10;
+
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const isValidPlc = (p) => Number.isFinite(p) && p >= PLC_MIN && p <= PLC_MAX;
+
+// Rebuild 10% / 20% / 70% from booking.finalAmount, then deduct what is
+// already paid (e.g. a hold payment): booking first, then agreement, then full.
+const rebuildSchedule = (booking) => {
+  const total = booking.finalAmount;
+  const parts = {
+    booking: round2(total * 0.1),
+    agreement: round2(total * 0.2),
+  };
+  parts.full = round2(total - parts.booking - parts.agreement);
+
+  let paidLeft = booking.amountPaid || 0;
+
+  ["booking", "agreement", "full"].forEach((key) => {
+    const slot = booking.paymentSchedule[key];
+    const covered = Math.min(paidLeft, parts[key]);
+    paidLeft -= covered;
+
+    const due = round2(parts[key] - covered);
+    const wasPaid = slot.paid;
+
+    slot.amount = due;
+    slot.paid = due === 0;
+    if (slot.paid && !wasPaid) slot.date = new Date();
+  });
+};
+
+// PLC % is applied on the base amount (finalAmount minus any earlier PLC),
+// so applying it twice never double-charges.
+const applyPlc = (booking, percent) => {
+  const base = round2((booking.finalAmount || 0) - (booking.plcAmount || 0));
+  const plcAmount = round2((base * percent) / 100);
+
+  booking.plcPercent = percent;
+  booking.plcAmount = plcAmount;
+  booking.finalAmount = round2(base + plcAmount);
+
+  rebuildSchedule(booking);
+  booking.markModified("paymentSchedule");
+};
+
 router.get("/", fetchuser, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -144,14 +190,30 @@ router.post("/add", fetchuser, async (req, res) => {
     }
 
     // 🔥 CALCULATIONS
+    // 🔥 CALCULATIONS
+    const isAdminOrStaff = user.role === "admin" || user.role === "staff";
+
     const totalAmount = plotData.price * plotData.area;
 
     const finalRate = requestAmount || plotData.price;
     const baseAmount = finalRate * plotData.area;
 
-    const bookingAmount = baseAmount * 0.1;
-    const agreementAmount = baseAmount * 0.20;
-    const fullAmount = baseAmount - bookingAmount - agreementAmount;
+    // PLC: admin/staff choose it now. For agent bookings it is set when admin approves.
+    let plcPercent = 0;
+    if (plotData.plc && isAdminOrStaff) {
+      plcPercent = Number(req.body.plcPercent);
+      if (!isValidPlc(plcPercent)) {
+        return res.status(400).json({
+          message: `PLC percentage (${PLC_MIN}-${PLC_MAX}) is required for this plot`,
+        });
+      }
+    }
+    const plcAmount = round2((baseAmount * plcPercent) / 100);
+    const finalAmount = round2(baseAmount + plcAmount);
+
+    const bookingAmount = finalAmount * 0.1;
+    const agreementAmount = finalAmount * 0.2;
+    const fullAmount = finalAmount - bookingAmount - agreementAmount;
 
     const today = new Date();
     const bookingDate = new Date(today);
@@ -173,7 +235,9 @@ router.post("/add", fetchuser, async (req, res) => {
       plotArea: plotData.area,
 
       totalAmount,
-      finalAmount: baseAmount,
+      plcPercent,
+      plcAmount,
+      finalAmount, // requested price × area + PLC
       requestAmount,
       termsAccepted,
       createdBy: user._id,
@@ -355,6 +419,110 @@ router.post("/add", fetchuser, async (req, res) => {
   }
 });
 
+// router.put("/action/:id", fetchuser, async (req, res) => {
+//   try {
+//     const user = await User.findById(req.user.id);
+
+//     if (user.role !== "admin" && user.role !== "staff") {
+//       return res.status(403).json({
+//         message: "Only admin or staff can take action",
+//       });
+//     }
+
+//     const { action, note } = req.body;
+
+//     let update = {};
+
+//     if (action === "approve") {
+//       update.status = "pending";
+//     } else if (action === "reject") {
+//       if (!note) {
+//         return res.status(400).json({
+//           message: "Note required for rejection",
+//         });
+//       }
+
+//       update.status = "rejected";
+//     } else {
+//       return res.status(400).json({
+//         message: "Invalid action",
+//       });
+//     }
+
+//     if (action === "reject") {
+//       const bookingData = await Booking.findById(req.params.id);
+
+//       const colonyData = await Colony.findById(bookingData.colony);
+
+//       const plot = colonyData.layout.plots.find(
+//         (p) => p.plotId === bookingData.plotId,
+//       );
+
+//       if (plot) plot.plotType = "FOR_SALE";
+
+//       await colonyData.save();
+//     }
+
+//     // 🔥 ADD NOTE
+//     if (note) {
+//       update.$push = {
+//         notes: {
+//           text: note,
+//           by: user._id,
+//         },
+//       };
+//     }
+
+//     const booking = await Booking.findByIdAndUpdate(req.params.id, update, {
+//       new: true,
+//     });
+//     if (action === "approve") {
+//       await notifyUser({
+//         user: booking.agent,
+//         sender: user._id,
+//         title: "Booking Approved",
+//         message: "Your booking request has been approved.",
+//         type: "booking",
+//         referenceId: booking._id,
+//         referenceModel: "Booking",
+//       });
+
+//       await notifyUser({
+//         user: booking.customer,
+//         sender: user._id,
+//         title: "Booking Approved",
+//         message: "Your booking has been approved.",
+//         type: "booking",
+//         referenceId: booking._id,
+//         referenceModel: "Booking",
+//       });
+//     } else if (action === "reject") {
+//       await notifyUser({
+//         user: booking.agent,
+//         sender: user._id,
+//         title: "Booking Rejected",
+//         message: "Your booking request has been rejected.",
+//         type: "booking",
+//         referenceId: booking._id,
+//         referenceModel: "Booking",
+//       });
+
+//       await notifyUser({
+//         user: booking.customer,
+//         sender: user._id,
+//         title: "Booking Rejected",
+//         message: "Your booking request has been rejected.",
+//         type: "booking",
+//         referenceId: booking._id,
+//         referenceModel: "Booking",
+//       });
+//     }
+//     res.json(booking);
+//   } catch (error) {
+//     res.status(500).send("Server Error");
+//   }
+// });
+
 router.put("/action/:id", fetchuser, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -365,96 +533,97 @@ router.put("/action/:id", fetchuser, async (req, res) => {
       });
     }
 
-    const { action, note } = req.body;
+    const { action, note, plcPercent } = req.body;
 
-    let update = {};
+    if (action !== "approve" && action !== "reject") {
+      return res.status(400).json({ message: "Invalid action" });
+    }
+
+    if (action === "reject" && !note) {
+      return res.status(400).json({ message: "Note required for rejection" });
+    }
+
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    const colonyData = await Colony.findById(booking.colony);
+    const plotData = colonyData?.layout.plots.find(
+      (p) => p._id.toString() === booking.plot.toString(),
+    );
 
     if (action === "approve") {
-      update.status = "pending";
-    } else if (action === "reject") {
-      if (!note) {
-        return res.status(400).json({
-          message: "Note required for rejection",
-        });
+      booking.status = "pending";
+
+      // PLC plot: admin selects 5-10% (required unless already set at booking time)
+      if (plotData?.plc) {
+        const alreadySet = Number(booking.plcPercent) > 0;
+
+        if (
+          plcPercent !== undefined &&
+          plcPercent !== null &&
+          plcPercent !== ""
+        ) {
+          const pct = Number(plcPercent);
+          if (!isValidPlc(pct)) {
+            return res.status(400).json({
+              message: `PLC percentage must be between ${PLC_MIN} and ${PLC_MAX}`,
+              plcRequired: true,
+            });
+          }
+          applyPlc(booking, pct); // recalculates plcAmount, finalAmount, schedule
+        } else if (!alreadySet) {
+          return res.status(400).json({
+            message: `Select PLC percentage (${PLC_MIN}-${PLC_MAX}) to approve`,
+            plcRequired: true,
+          });
+        }
       }
-
-      update.status = "rejected";
     } else {
-      return res.status(400).json({
-        message: "Invalid action",
-      });
+      booking.status = "rejected";
+
+      if (plotData) {
+        plotData.plotType = "FOR_SALE";
+        await colonyData.save();
+      }
     }
 
-    if (action === "reject") {
-      const bookingData = await Booking.findById(req.params.id);
-
-      const colonyData = await Colony.findById(bookingData.colony);
-
-      const plot = colonyData.layout.plots.find(
-        (p) => p.plotId === bookingData.plotId,
-      );
-
-      if (plot) plot.plotType = "FOR_SALE";
-
-      await colonyData.save();
-    }
-
-    // 🔥 ADD NOTE
     if (note) {
-      update.$push = {
-        notes: {
-          text: note,
-          by: user._id,
-        },
-      };
+      booking.notes.push({ text: note, by: user._id });
     }
 
-    const booking = await Booking.findByIdAndUpdate(req.params.id, update, {
-      new: true,
+    await booking.save();
+
+    const approved = action === "approve";
+
+    await notifyUser({
+      user: booking.agent,
+      sender: user._id,
+      title: approved ? "Booking Approved" : "Booking Rejected",
+      message: approved
+        ? "Your booking request has been approved."
+        : "Your booking request has been rejected.",
+      type: "booking",
+      referenceId: booking._id,
+      referenceModel: "Booking",
     });
-    if (action === "approve") {
-      await notifyUser({
-        user: booking.agent,
-        sender: user._id,
-        title: "Booking Approved",
-        message: "Your booking request has been approved.",
-        type: "booking",
-        referenceId: booking._id,
-        referenceModel: "Booking",
-      });
 
-      await notifyUser({
-        user: booking.customer,
-        sender: user._id,
-        title: "Booking Approved",
-        message: "Your booking has been approved.",
-        type: "booking",
-        referenceId: booking._id,
-        referenceModel: "Booking",
-      });
-    } else if (action === "reject") {
-      await notifyUser({
-        user: booking.agent,
-        sender: user._id,
-        title: "Booking Rejected",
-        message: "Your booking request has been rejected.",
-        type: "booking",
-        referenceId: booking._id,
-        referenceModel: "Booking",
-      });
+    await notifyUser({
+      user: booking.customer,
+      sender: user._id,
+      title: approved ? "Booking Approved" : "Booking Rejected",
+      message: approved
+        ? "Your booking has been approved."
+        : "Your booking request has been rejected.",
+      type: "booking",
+      referenceId: booking._id,
+      referenceModel: "Booking",
+    });
 
-      await notifyUser({
-        user: booking.customer,
-        sender: user._id,
-        title: "Booking Rejected",
-        message: "Your booking request has been rejected.",
-        type: "booking",
-        referenceId: booking._id,
-        referenceModel: "Booking",
-      });
-    }
     res.json(booking);
   } catch (error) {
+    console.log(error);
     res.status(500).send("Server Error");
   }
 });
