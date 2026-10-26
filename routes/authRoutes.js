@@ -1377,4 +1377,49 @@ router.put("/update-rank-slab/:level", fetchuser, async (req, res) => {
   }
 });
 
+router.put("/admin-change-password/:id", fetchuser, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user.id);
+
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({
+        message: "Only admin can change another user's password",
+      });
+    }
+
+    // own password goes through /change-password (needs the current password)
+    if (String(admin._id) === String(req.params.id)) {
+      return res.status(400).json({
+        message: "Use Change Password to update your own password",
+      });
+    }
+
+    const { newPassword } = req.body;
+
+    if (!newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({
+        message: "Password must be at least 6 characters",
+      });
+    }
+
+    const user = await User.findById(req.params.id).select("name");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const hashed = await bcrypt.hash(String(newPassword), 10);
+
+    // updateOne skips validators/hooks, so legacy user documents can't block the reset
+    await User.updateOne({ _id: user._id }, { $set: { password: hashed } });
+
+    res.json({
+      success: true,
+      message: `Password updated for ${user.name}`,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 module.exports = router;

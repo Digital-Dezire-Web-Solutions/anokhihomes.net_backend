@@ -6,6 +6,8 @@ const Festival = require("../models/Festival");
 const Event = require("../models/Event");
 const fetchuser = require("../middleware/fetchUser");
 const festivalTemplate = require("../utils/festivalTemplate");
+const IncomeHistory = require("../models/IncomeHistory");
+const BirthdaySetting = require("../models/BirthdaySetting");
 
 /* ---------------- helpers ---------------- */
 
@@ -40,6 +42,20 @@ const adminOnly = async (req, res, next) => {
   }
 };
 
+const inr = (n) =>
+  Number(n || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+// A batch formed on/after the 15th is shown until the last day of that month.
+// A batch formed before the 15th (i.e. the 1st) is shown until the 15th.
+const bestPerformerExpiry = (day) => {
+  const [y, m, d] = day.split("-").map(Number);
+  if (d >= 15) return `${y}-${pad(m)}-${pad(new Date(y, m, 0).getDate())}`;
+  return `${y}-${pad(m)}-15`;
+};
+
 // Create the festival rows for a year if they don't exist yet
 const ensureFestivals = async (year) => {
   const existing = await Festival.find({ year }).select("name");
@@ -68,10 +84,12 @@ router.get("/today", fetchuser, async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const items = [];
-
     // 1) Birthday — only for the person whose birthday it is
     const dob = parseDob(user.dob);
     if (dob && today.slice(5) === `${pad(dob.month)}-${pad(dob.day)}`) {
+      const bdaySetting = await BirthdaySetting.findOne({
+        key: "default",
+      }).select("image");
       items.push({
         type: "birthday",
         label: "Birthday wish",
@@ -79,6 +97,7 @@ router.get("/today", fetchuser, async (req, res) => {
         title: `Happy Birthday, ${user.name}!`,
         message:
           "Wishing you a year full of good health, happiness and great success. Thank you for being part of the team.",
+        image: bdaySetting?.image || "",
       });
     }
 
@@ -94,18 +113,72 @@ router.get("/today", fetchuser, async (req, res) => {
         message:
           f.message ||
           `Wishing you and your family a joyful ${f.name}. May it bring happiness and prosperity.`,
+        image: f.image || "",
       }),
     );
+    // 2b) Best performer — visible to everyone until the batch expires
+    try {
+      const latest = await IncomeHistory.findOne({
+        type: "best_performance_income",
+      })
+        .sort({ createdAt: -1 })
+        .select("createdAt");
+
+      if (latest) {
+        // the day (IST) the latest best-performer batch was created
+        const batchDay = latest.createdAt.toLocaleDateString("en-CA", {
+          timeZone: "Asia/Kolkata",
+        });
+
+        if (today >= batchDay && today <= bestPerformerExpiry(batchDay)) {
+          const rows = await IncomeHistory.find({
+            type: "best_performance_income",
+            createdAt: {
+              $gte: new Date(`${batchDay}T00:00:00+05:30`),
+              $lte: new Date(`${batchDay}T23:59:59.999+05:30`),
+            },
+          }).populate("user", "name referralId");
+
+          // one entry per winner (sum if they have more than one row)
+          const winners = {};
+          rows.forEach((r) => {
+            if (!r.user) return;
+            const id = String(r.user._id);
+            if (!winners[id]) winners[id] = { user: r.user, amount: 0 };
+            winners[id].amount += r.amount || 0;
+          });
+          const list = Object.values(winners);
+
+          if (list.length) {
+            const mine = winners[String(user._id)];
+            const names = list
+              .map((w) => `${w.user.name} (${w.user.referralId})`)
+              .join(", ");
+
+            items.push({
+              type: "best_performer",
+              label: "Best performer",
+              emoji: "🏆",
+              title: mine
+                ? "Congratulations, you are the Best Performer!"
+                : "Best Performer of the Cycle",
+              message: mine
+                ? `You earned ₹${inr(mine.amount)} as Best Performance Income. Thank you for your outstanding work.`
+                : `Congratulations to ${names} for being the Best Performer. Keep going, you could be next!`,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.log("best performer feed error", e); // never block birthday/festival/events
+    }
 
     // 3) Admin events — all, or only if this user was selected
     const events = await Event.find({
       isActive: true,
       date: { $lte: today },
       endDate: { $gte: today },
-      $or: [
-        { audience: "all" },
-        { audience: "selected", viewers: user._id },
-      ],
+      $or: [{ audience: "all" }, { audience: "selected", viewers: user._id }],
     }).sort({ date: 1 });
     events.forEach((e) =>
       items.push({
@@ -144,7 +217,7 @@ router.get("/festivals", fetchuser, adminOnly, async (req, res) => {
 
 router.post("/festivals", fetchuser, adminOnly, async (req, res) => {
   try {
-    const { name, date, emoji, message } = req.body;
+    const { name, date, emoji, message, image } = req.body;
     if (!name || !DATE_RE.test(date || ""))
       return res.status(400).json({ message: "Name and valid date required" });
     const festival = await Festival.create({
@@ -152,6 +225,7 @@ router.post("/festivals", fetchuser, adminOnly, async (req, res) => {
       date,
       emoji: emoji || "🎉",
       message: message || "",
+      image: image || "",
       year: Number(date.slice(0, 4)),
       confirmed: true,
       updatedBy: req.admin._id,
@@ -173,7 +247,7 @@ router.put("/festivals/:id", fetchuser, adminOnly, async (req, res) => {
     if (!festival)
       return res.status(404).json({ message: "Festival not found" });
 
-    const { date, message, isActive, emoji } = req.body;
+    const { date, message, isActive, emoji, image } = req.body;
 
     if (date !== undefined) {
       if (!DATE_RE.test(date))
@@ -188,11 +262,37 @@ router.put("/festivals/:id", fetchuser, adminOnly, async (req, res) => {
     }
     if (message !== undefined) festival.message = message;
     if (emoji !== undefined) festival.emoji = emoji;
+    if (image !== undefined) festival.image = image;
     if (isActive !== undefined) festival.isActive = !!isActive;
     festival.updatedBy = req.admin._id;
 
     await festival.save();
     res.json(festival);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Server Error");
+  }
+});
+
+router.get("/birthday", fetchuser, adminOnly, async (req, res) => {
+  try {
+    const s = await BirthdaySetting.findOne({ key: "default" });
+    res.json({ image: s?.image || "" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Server Error");
+  }
+});
+
+router.put("/birthday", fetchuser, adminOnly, async (req, res) => {
+  try {
+    const image = typeof req.body.image === "string" ? req.body.image : "";
+    const s = await BirthdaySetting.findOneAndUpdate(
+      { key: "default" },
+      { image, updatedBy: req.admin._id },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+    res.json({ image: s.image });
   } catch (error) {
     console.log(error);
     res.status(500).send("Server Error");

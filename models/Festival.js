@@ -11,6 +11,7 @@ const festivalSchema = new mongoose.Schema(
     message: { type: String, default: "" },
     year: { type: Number, required: true },
     date: { type: String, required: true },
+    image: { type: String, default: "" },
     // false = date is approximate (moon/lunar based) and admin should verify it
     confirmed: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
