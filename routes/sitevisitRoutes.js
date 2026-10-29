@@ -21,8 +21,8 @@ router.get("/", fetchuser, async (req, res) => {
       query = { customer: loggedUser._id };
     }
     const visits = await SiteVisit.find(query)
-      .populate("customer", "name phone")
-      .populate("agent", "name phone")
+      .populate("customer", "name phone referralId")
+      .populate("agent", "name phone referralId")
       .populate("location", "name")
       .populate("colonies.colony", "name")
       .populate("notes.by", "name role");

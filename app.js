@@ -66,6 +66,7 @@ app.use("/api/expense", require("./routes/expenseRoute"));
 app.use("/api/account", require("./routes/accountRoutes"));
 app.use("/api/kyc", require("./routes/kycRoutes"));
 app.use("/api/events", require("./routes/eventRoutes"));
+app.use("/api/transfer", require("./routes/transfer"));
 
 app.get("/", (req, res) => {
   res.json({ message: "Hello MERN Stack! " });

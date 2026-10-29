@@ -55,13 +55,37 @@ router.put("/read-all", fetchuser, async (req, res) => {
   });
 });
 
-router.delete("/:id", fetchuser, async (req, res) => {
-  await Notification.findByIdAndDelete(req.params.id);
-
-  res.json({
-    success: true,
-  });
+router.put("/read-all", fetchuser, async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { user: req.user.id, isRead: false },
+      { isRead: true, readAt: new Date() },
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
+
+router.delete("/:id", fetchuser, async (req, res) => {
+  try {
+    await Notification.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user.id,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+// router.delete("/:id", fetchuser, async (req, res) => {
+//   await Notification.findByIdAndDelete(req.params.id);
+
+//   res.json({
+//     success: true,
+//   });
+// });
 
 router.get("/count", fetchuser, async (req, res) => {
   const count = await Notification.countDocuments({

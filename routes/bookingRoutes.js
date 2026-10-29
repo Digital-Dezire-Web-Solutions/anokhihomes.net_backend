@@ -581,12 +581,18 @@ router.put("/action/:id", fetchuser, async (req, res) => {
         }
       }
     } else {
-      booking.status = "rejected";
-
-      if (plotData) {
-        plotData.plotType = "FOR_SALE";
-        await colonyData.save();
+      if (booking.status === "confirmed") {
+        return res
+          .status(400)
+          .json({ message: "A confirmed booking cannot be rejected" });
       }
+      if ((booking.amountPaid || 0) > 0) {
+        return res.status(400).json({
+          message:
+            "Payments are already received on this booking. Handle the refund / cancellation first.",
+        });
+      }
+      booking.status = "rejected";
     }
 
     if (note) {
@@ -594,6 +600,10 @@ router.put("/action/:id", fetchuser, async (req, res) => {
     }
 
     await booking.save();
+
+    if (action === "reject") {
+      await releasePlot(booking);
+    }
 
     const approved = action === "approve";
 
@@ -774,10 +784,24 @@ router.delete(
 
 router.delete("/delete/:id", fetchuser, async (req, res) => {
   try {
-    await Booking.findByIdAndDelete(req.params.id);
+    const user = await User.findById(req.user.id).select("role");
+    if (!user || !["admin", "staff"].includes(user.role)) {
+      return res
+        .status(403)
+        .json({ message: "Only admin or staff can delete bookings" });
+    }
+
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    await Booking.findByIdAndDelete(booking._id);
+    await releasePlot(booking);
 
     res.json({ message: "Booking deleted" });
   } catch (error) {
+    console.log(error);
     res.status(500).send("Server Error");
   }
 });
