@@ -57,6 +57,7 @@ router.post("/add", fetchuser, async (req, res) => {
         status: "pending",
       })),
       visitDate: req.body.visitDate,
+      visiters: req.body.visiters,
       createdBy: loggedUser._id,
     };
 
@@ -78,7 +79,7 @@ router.post("/add", fetchuser, async (req, res) => {
       await notifyAdmins({
         sender: loggedUser._id,
         title: "New Site Visit Request",
-        message: `${loggedUser.name} requested a site visit for ${req.body.visitDate}.`,
+        message: `${loggedUser.name} requested a site visit for ${req.body.visitDate} with ${req.body.visiters} Persons.`,
         type: "sitevisit",
         referenceId: visit._id,
         referenceModel: "SiteVisit",
